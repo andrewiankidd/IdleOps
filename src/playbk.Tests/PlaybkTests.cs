@@ -14,6 +14,12 @@ public class PlaybkTests
             return;
         }
 
+        if (Environment.GetEnvironmentVariable("CI") == "true")
+        {
+            // Skip in CI — requires display, ffmpeg, and a launchable browser.
+            return;
+        }
+
         var tempRoot = Path.Combine(Path.GetTempPath(), "playbk-tests");
         Directory.CreateDirectory(tempRoot);
         var outputDir = Path.Combine(tempRoot, "outputs");
