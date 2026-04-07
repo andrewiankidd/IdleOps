@@ -1,0 +1,39 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore IdleOps.sln
+
+      - name: Build
+        run: dotnet build IdleOps.sln --configuration Release --no-restore
+
+      - name: Test (excluding hardware-dependent tests)
+        run: |
+          dotnet test IdleOps.sln `
+            --configuration Release `
+            --no-build `
+            --filter "FullyQualifiedName!~RecordingTests&FullyQualifiedName!~PlaybkTests.PlaybkTests" `
+            --logger "console;verbosity=normal"
+
+      - name: Smoke test — run .idleops.yaml via playbk
+        run: |
+          src/playbk/bin/Release/net10.0/playbk.exe `
+            -i src/playbk/inputs/smoke-test.idleops.yaml `
+            -o ./smoke-outputs

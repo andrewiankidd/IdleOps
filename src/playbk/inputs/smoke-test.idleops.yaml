@@ -1,0 +1,25 @@
+# Smoke test — exercises built-in playbk actions without requiring a desktop
+# Used by CI to verify the toolkit works end-to-end
+
+steps:
+  - name: Sleep for 1 second
+    action: sleep
+    args: "1"
+
+  - name: Run echo via exec
+    action: exec
+    args: cmd /c echo Hello from IdleOps
+    wait: true
+
+  - name: Sleep half a second
+    action: sleep
+    args: "0.5"
+
+  - name: Run dir via exec
+    action: exec
+    args: cmd /c dir /b
+    wait: true
+
+  - name: Final sleep
+    action: sleep
+    args: "0.5"
