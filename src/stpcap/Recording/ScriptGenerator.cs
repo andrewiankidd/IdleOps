@@ -1,0 +1,141 @@
+using System.Text;
+using IdleOps.Shared.Windows;
+
+namespace stpcap.Recording;
+
+internal static class ScriptGenerator
+{
+    private static readonly Dictionary<ushort, string> VkNames = new()
+    {
+        [0x08] = "BACKSPACE", [0x09] = "TAB", [0x0D] = "ENTER", [0x10] = "SHIFT",
+        [0x11] = "CTRL", [0x12] = "ALT", [0x1B] = "ESCAPE", [0x20] = "SPACE",
+        [0x25] = "LEFT", [0x26] = "UP", [0x27] = "RIGHT", [0x28] = "DOWN",
+        [0x2E] = "DELETE", [0x24] = "HOME", [0x23] = "END",
+        [0x21] = "PAGEUP", [0x22] = "PAGEDOWN",
+        [0x70] = "F1", [0x71] = "F2", [0x72] = "F3", [0x73] = "F4",
+        [0x74] = "F5", [0x75] = "F6", [0x76] = "F7", [0x77] = "F8",
+        [0x78] = "F9", [0x79] = "F10", [0x7A] = "F11", [0x7B] = "F12"
+    };
+
+    public static string Generate(IReadOnlyList<InputEvent> events)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Recorded by stpcap");
+        sb.AppendLine("steps:");
+
+        DateTime? lastTime = null;
+
+        for (var i = 0; i < events.Count; i++)
+        {
+            var evt = events[i];
+
+            // Insert sleep between events if gap > 500ms
+            if (lastTime is not null)
+            {
+                var gap = (evt.Timestamp - lastTime.Value).TotalSeconds;
+                if (gap > 0.5)
+                {
+                    sb.AppendLine($"  - name: Wait {gap:0.#}s");
+                    sb.AppendLine($"    action: sleep");
+                    sb.AppendLine($"    args: \"{gap:0.#}\"");
+                    sb.AppendLine();
+                }
+            }
+
+            var windowArg = evt.WindowTitle is not null ? $"    window: \"{EscapeYaml(evt.WindowTitle)}\"" : null;
+
+            switch (evt.Type)
+            {
+                case InputEventType.TextInput:
+                    sb.AppendLine($"  - name: Type text");
+                    sb.AppendLine($"    action: exec");
+                    sb.AppendLine($"    args: inpctl --window \"{EscapeYaml(evt.WindowTitle ?? "*")}\" --type \"{EscapeYaml(evt.Button)}\"");
+                    sb.AppendLine($"    wait: true");
+                    break;
+
+                case InputEventType.KeyDown:
+                    // Look ahead for key combo pattern (modifier down + key down + key up + modifier up)
+                    var keyName = VkToName(evt.VirtualKey);
+                    if (keyName is not null && !IsModifier(evt.VirtualKey))
+                    {
+                        // Check if preceded by modifier downs
+                        var combo = BuildCombo(events, i);
+                        sb.AppendLine($"  - name: Press {combo}");
+                        sb.AppendLine($"    action: exec");
+                        sb.AppendLine($"    args: inpctl --window \"{EscapeYaml(evt.WindowTitle ?? "*")}\" --keyboard \"{combo}\"");
+                        sb.AppendLine($"    wait: true");
+                    }
+                    break;
+
+                case InputEventType.MouseClick:
+                    var btn = evt.Button == "right" ? "--rightmouse" : evt.Button == "middle" ? "--middlemouse" : "--leftmouse";
+                    // Convert screen coords to window-relative
+                    var (relX, relY) = ToWindowRelative(evt.WindowTitle, evt.X, evt.Y);
+                    sb.AppendLine($"  - name: Click at ({relX},{relY})");
+                    sb.AppendLine($"    action: exec");
+                    sb.AppendLine($"    args: inpctl --window \"{EscapeYaml(evt.WindowTitle ?? "*")}\" {btn} \"{relX},{relY}\"");
+                    sb.AppendLine($"    wait: true");
+                    break;
+
+                case InputEventType.MouseDrag:
+                    var (sx, sy) = ToWindowRelative(evt.WindowTitle, evt.X, evt.Y);
+                    var (ex, ey) = ToWindowRelative(evt.WindowTitle, evt.EndX, evt.EndY);
+                    sb.AppendLine($"  - name: Drag from ({sx},{sy}) to ({ex},{ey})");
+                    sb.AppendLine($"    action: exec");
+                    sb.AppendLine($"    args: inpctl --window \"{EscapeYaml(evt.WindowTitle ?? "*")}\" --leftmouse \"{sx},{sy}-{ex},{ey}\" --move-cursor");
+                    sb.AppendLine($"    wait: true");
+                    break;
+            }
+
+            sb.AppendLine();
+            lastTime = evt.Timestamp;
+        }
+
+        return sb.ToString();
+    }
+
+    private static string BuildCombo(IReadOnlyList<InputEvent> events, int keyIndex)
+    {
+        var parts = new List<string>();
+
+        // Look backward for recent modifier key-downs (within last few events)
+        for (var j = keyIndex - 1; j >= Math.Max(0, keyIndex - 6); j--)
+        {
+            if (events[j].Type == InputEventType.KeyDown && IsModifier(events[j].VirtualKey))
+            {
+                var name = VkToName(events[j].VirtualKey);
+                if (name is not null && !parts.Contains(name))
+                {
+                    parts.Insert(0, name);
+                }
+            }
+            else break;
+        }
+
+        var keyName = VkToName(events[keyIndex].VirtualKey) ?? $"0x{events[keyIndex].VirtualKey:X2}";
+        parts.Add(keyName);
+
+        return string.Join("+", parts);
+    }
+
+    private static bool IsModifier(ushort vk) => vk is 0x10 or 0x11 or 0x12;
+
+    private static string? VkToName(ushort vk)
+    {
+        if (VkNames.TryGetValue(vk, out var name)) return name;
+        if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString(); // 0-9
+        if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString(); // A-Z
+        return null;
+    }
+
+    private static (int x, int y) ToWindowRelative(string? windowTitle, int screenX, int screenY)
+    {
+        if (windowTitle is null) return (screenX, screenY);
+        var match = WindowMatcher.FindWindow(windowTitle);
+        if (match is null) return (screenX, screenY);
+        var rect = WindowMatcher.GetWindowBounds(match.Handle);
+        return (screenX - rect.Left, screenY - rect.Top);
+    }
+
+    private static string EscapeYaml(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+}

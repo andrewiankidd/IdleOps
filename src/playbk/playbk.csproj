@@ -1,0 +1,67 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="playbk.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="15.3.0" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\shared\shared.csproj" />
+    <ProjectReference Include="..\outcap\outcap.csproj" />
+    <ProjectReference Include="..\inpctl\inpctl.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutcapBinDir>$(MSBuildThisFileDirectory)..\outcap\bin\$(Configuration)\net10.0\</OutcapBinDir>
+    <InpctlBinDir>$(MSBuildThisFileDirectory)..\inpctl\bin\$(Configuration)\net10.0\</InpctlBinDir>
+    <TxtfndBinDir>$(MSBuildThisFileDirectory)..\txtfnd\bin\$(Configuration)\net10.0-windows10.0.22621.0\</TxtfndBinDir>
+    <ScrcapBinDir>$(MSBuildThisFileDirectory)..\scrcap\bin\$(Configuration)\net10.0\</ScrcapBinDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <OutcapFiles Include="$(OutcapBinDir)**\*.*" />
+    <InpctlFiles Include="$(InpctlBinDir)**\*.*" />
+    <TxtfndFiles Include="$(TxtfndBinDir)**\*.*" />
+    <ScrcapFiles Include="$(ScrcapBinDir)**\*.*" />
+  </ItemGroup>
+
+  <Target Name="CopyOutcapToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(OutcapBinDir)')">
+    <Message Text="Copying outcap build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(OutcapFiles)"
+          DestinationFolder="$(OutputPath)\%(OutcapFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyInpctlToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(InpctlBinDir)')">
+    <Message Text="Copying inpctl build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(InpctlFiles)"
+          DestinationFolder="$(OutputPath)\%(InpctlFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyTxtfndToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(TxtfndBinDir)')">
+    <Message Text="Copying txtfnd build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(TxtfndFiles)"
+          DestinationFolder="$(OutputPath)\%(TxtfndFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyScrcapToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(ScrcapBinDir)')">
+    <Message Text="Copying scrcap build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(ScrcapFiles)"
+          DestinationFolder="$(OutputPath)\%(ScrcapFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

@@ -1,0 +1,24 @@
+# Build outputs
+bin/
+obj/
+
+# User-specific
+*.user
+*.userprefs
+
+# Logs
+*.log
+
+# NuGet
+*.nupkg
+.nuget/
+packages/
+
+# JetBrains Rider
+.idea/
+
+# macOS
+.DS_Store
+
+# Visual Studio Code
+.vscode/

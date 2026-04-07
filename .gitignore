@@ -1,0 +1,15 @@
+# IDE/VS
+.vs/
+.claude/
+
+videos/
+outputs/
+*.mp4
+*.webm
+*.aac
+*.wav
+*.mov
+*.mkv
+*.flv
+*.avi
+*.wmv

@@ -1,0 +1,103 @@
+# mspaint-smiley — launch Paint, draw a smiley face, record
+# Note: Paint tool selection uses OCR where possible, falls back to percentage coords
+# for the drawing canvas. Works best on default Paint window size.
+#
+# Usage:
+#   src/playbk/bin/Debug/net10.0/playbk.exe -i src/playbk/inputs/mspaint-smiley.idleops.yaml -o ./outputs
+
+steps:
+  - id: paint
+    name: Launch Paint
+    action: exec
+    args: mspaint.exe
+    wait: false
+
+  - name: Wait for Paint window
+    action: wait-window
+    window: "*Paint*"
+    timeout: 10
+
+  - name: Let Paint fully load
+    action: sleep
+    args: "2"
+
+  - id: record
+    name: Start recording
+    action: exec
+    args: outcap.exe --window "*Paint*" --timer 30
+    wait: false
+
+  - name: Let recording start
+    action: sleep
+    args: "1"
+
+  # Select oval/ellipse tool via OCR (look for "Shapes" or the toolbar area)
+  - name: Select oval tool
+    action: click-text
+    window: "*Paint*"
+    text: "Shapes"
+
+  - name: Brief pause
+    action: sleep
+    args: "1"
+
+  # Draw face (circle) on canvas using percentage coords
+  - name: Draw face circle
+    action: exec
+    args: inpctl.exe --window "*Paint*" --leftmouse "40%,40%-60%,60%" --move-cursor
+    wait: true
+
+  - name: Brief pause
+    action: sleep
+    args: "0.5"
+
+  # Draw left eye
+  - name: Draw left eye
+    action: exec
+    args: inpctl.exe --window "*Paint*" --leftmouse "43%,45%-48%,50%" --move-cursor
+    wait: true
+
+  # Draw right eye
+  - name: Draw right eye
+    action: exec
+    args: inpctl.exe --window "*Paint*" --leftmouse "52%,45%-57%,50%" --move-cursor
+    wait: true
+
+  - name: Brief pause
+    action: sleep
+    args: "0.5"
+
+  # Draw smile using a line
+  - name: Draw smile
+    action: exec
+    args: inpctl.exe --window "*Paint*" --leftmouse "42.5%,52.5%-57.5%,52.5%" --move-cursor
+    wait: true
+
+  - name: Pause to admire the art
+    action: sleep
+    args: "2"
+
+  # Close Paint
+  - name: Close Paint
+    action: exec
+    args: inpctl.exe --window "*Paint*" --keyboard "ALT+F4"
+    wait: true
+
+  - name: Wait for save prompt
+    action: sleep
+    args: "1"
+
+  # Dismiss save prompt via OCR
+  - name: Click Don't Save
+    action: click-text
+    window: "*Paint*"
+    text: "Don"
+
+  - name: Wait for Paint to close
+    action: sleep
+    args: "1"
+
+  - name: Stop recording
+    action: exec
+    args: inpctl.exe --pid %record_pid% --ctrlc
+    wait: true

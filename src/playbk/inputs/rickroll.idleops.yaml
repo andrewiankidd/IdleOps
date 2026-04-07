@@ -1,0 +1,29 @@
+# rickroll — open YouTube Rick Astley video, record 10s of audio+video
+#
+# Usage:
+#   src/playbk/bin/Debug/net10.0/playbk.exe -i src/playbk/inputs/rickroll.idleops.yaml -o ./outputs
+
+steps:
+  - name: Launch browser with YouTube
+    action: exec
+    args: chrome.exe https://www.youtube.com/watch?v=dQw4w9WgXcQ
+    wait: false
+
+  - name: Wait for browser window
+    action: wait-window
+    window: "Rick Astley*"
+    timeout: 15
+
+  - name: Let video load
+    action: sleep
+    args: "3"
+
+  - name: Record 10 seconds of audio+video
+    action: exec
+    args: outcap.exe --window "Rick Astley*" --timer 10
+    wait: true
+
+  - name: Close browser
+    action: exec
+    args: inpctl.exe --window "Rick Astley*" --keyboard "ALT+F4"
+    wait: true
