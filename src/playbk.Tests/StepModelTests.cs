@@ -138,8 +138,66 @@ public class StepModelTests
         Assert.Null(step.Text);
         Assert.Null(step.Output);
         Assert.Null(step.Image);
+        Assert.Null(step.Voice);
         Assert.Null(step.Timeout);
         Assert.Null(step.Id);
         Assert.False(step.Wait);
+    }
+
+    [Fact]
+    public void DeserializesSpeakAction()
+    {
+        var yaml = """
+            steps:
+              - name: Narrate intro
+                action: speak
+                text: "Welcome to the walkthrough."
+                voice: Zira
+                output: narration/intro.wav
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("speak", step.Action);
+        Assert.Equal("Welcome to the walkthrough.", step.Text);
+        Assert.Equal("Zira", step.Voice);
+        Assert.Equal("narration/intro.wav", step.Output);
+    }
+
+    [Fact]
+    public void DeserializesSpeakActionWithDefaults()
+    {
+        var yaml = """
+            steps:
+              - name: Quick narration
+                action: speak
+                text: "Hello."
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("speak", step.Action);
+        Assert.Equal("Hello.", step.Text);
+        Assert.Null(step.Voice);
+        Assert.Null(step.Output);
+    }
+
+    [Fact]
+    public void DeserializesWaitWindowWithText()
+    {
+        // Repro of the silent-no-op bug: text: must round-trip onto Step.Text
+        // so the runner can shell out to waitfr.exe instead of dropping it.
+        var yaml = """
+            steps:
+              - name: Wait for main menu
+                action: wait-window
+                window: "MyApp*"
+                text: "Start"
+                timeout: 45
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("wait-window", step.Action);
+        Assert.Equal("MyApp*", step.Window);
+        Assert.Equal("Start", step.Text);
+        Assert.Equal(45, step.Timeout);
     }
 }

@@ -27,6 +27,8 @@
     <InpctlBinDir>$(MSBuildThisFileDirectory)..\inpctl\bin\$(Configuration)\net10.0\</InpctlBinDir>
     <TxtfndBinDir>$(MSBuildThisFileDirectory)..\txtfnd\bin\$(Configuration)\net10.0-windows10.0.22621.0\</TxtfndBinDir>
     <ScrcapBinDir>$(MSBuildThisFileDirectory)..\scrcap\bin\$(Configuration)\net10.0\</ScrcapBinDir>
+    <WaitfrBinDir>$(MSBuildThisFileDirectory)..\waitfr\bin\$(Configuration)\net10.0-windows10.0.22621.0\</WaitfrBinDir>
+    <SpkbakBinDir>$(MSBuildThisFileDirectory)..\spkbak\bin\$(Configuration)\net10.0-windows10.0.22621.0\</SpkbakBinDir>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +36,8 @@
     <InpctlFiles Include="$(InpctlBinDir)**\*.*" />
     <TxtfndFiles Include="$(TxtfndBinDir)**\*.*" />
     <ScrcapFiles Include="$(ScrcapBinDir)**\*.*" />
+    <WaitfrFiles Include="$(WaitfrBinDir)**\*.*" />
+    <SpkbakFiles Include="$(SpkbakBinDir)**\*.*" />
   </ItemGroup>
 
   <Target Name="CopyOutcapToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(OutcapBinDir)')">
@@ -61,6 +65,20 @@
     <Message Text="Copying scrcap build outputs to playbk bin..." Importance="low" />
     <Copy SourceFiles="@(ScrcapFiles)"
           DestinationFolder="$(OutputPath)\%(ScrcapFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyWaitfrToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(WaitfrBinDir)')">
+    <Message Text="Copying waitfr build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(WaitfrFiles)"
+          DestinationFolder="$(OutputPath)\%(WaitfrFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopySpkbakToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(SpkbakBinDir)')">
+    <Message Text="Copying spkbak build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(SpkbakFiles)"
+          DestinationFolder="$(OutputPath)\%(SpkbakFiles.RecursiveDir)"
           SkipUnchangedFiles="true" />
   </Target>
 

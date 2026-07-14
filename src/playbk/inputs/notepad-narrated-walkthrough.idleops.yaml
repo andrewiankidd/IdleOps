@@ -1,0 +1,89 @@
+# notepad-narrated-walkthrough — instructional tutorial demo
+#
+# A friendly walkthrough that teaches viewers how to open Notepad, type a
+# message, and close it without saving. The narration plays the role of an
+# instructor; the actions perform what the instructor describes.
+#
+# Showcases:
+#   - speak action (TTS via spkbak)
+#   - wait-window with text: (OCR-backed waitfr.exe)
+#   - click-text (OCR + click chain)
+#
+# Usage:
+#   src/playbk/bin/Debug/net10.0/playbk.exe -i src/playbk/inputs/notepad-narrated-walkthrough.idleops.yaml -o ./outputs
+
+steps:
+  - name: Intro narration
+    action: speak
+    text: "Hi there, and welcome to my Notepad demo. In this short walkthrough, I'll show you how to open Notepad, type a message, and close it."
+
+  - name: Brief pause before action
+    action: sleep
+    args: "0.5"
+
+  - name: Explain how to launch
+    action: speak
+    text: "First, let's open Notepad. You can find it in the Start menu, or just run it directly. Here we go."
+
+  - name: Launch Notepad
+    action: exec
+    args: notepad.exe
+    wait: false
+
+  - name: Wait for Notepad to appear
+    action: wait-window
+    window: "*Notepad"
+    timeout: 10
+
+  - name: Pause to let viewer take it in
+    action: sleep
+    args: "0.5"
+
+  - name: Explain typing
+    action: speak
+    text: "Notepad is now open. Let's type our first message: Hello, World!"
+
+  - name: Type the message
+    action: exec
+    args: inpctl.exe --window "*Notepad" --type "Hello, World!"
+    wait: true
+
+  - name: Confirm the text rendered
+    action: wait-window
+    window: "*Notepad"
+    text: "Hello"
+    timeout: 10
+
+  - name: Brief pause
+    action: sleep
+    args: "1"
+
+  - name: Explain closing
+    action: speak
+    text: "When you're done, you can close Notepad by pressing Alt plus F4."
+
+  - name: Send Alt+F4
+    action: exec
+    args: inpctl.exe --window "*Notepad" --keyboard "ALT+F4"
+    wait: true
+
+  - name: Pause for save dialog to render
+    action: sleep
+    args: "1"
+
+  - name: Explain the save prompt
+    action: speak
+    text: "Notepad is asking if you'd like to save your changes. Since this was just a demo, we'll click Don't save."
+
+  - name: Click Don't save
+    action: click-text
+    window: "*Notepad"
+    text: "Don't save"
+
+  - name: Brief pause before outro
+    action: sleep
+    args: "0.5"
+
+  - name: Outro
+    action: speak
+    text: "And that's it! You've just opened Notepad, typed a message, and closed it without saving. Thanks for watching!"

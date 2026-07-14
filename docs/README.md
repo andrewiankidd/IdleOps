@@ -8,6 +8,7 @@ Unlike browser-only tools like Cypress or Playwright, IdleOps works across the e
 
 - [Setup & Prerequisites](setup.md) — what you need installed before using IdleOps
 - [Script Authoring Guide](scripting.md) — how to write `.idleops.yaml` scripts for playbk
+- [Backlog](backlog.md) — planned work organized around the video-docs-in-CI vision
 
 ## Per-Tool Guides
 

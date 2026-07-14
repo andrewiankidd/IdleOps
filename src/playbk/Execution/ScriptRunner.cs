@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Drawing.Imaging;
 using System.Runtime.Versioning;
+using IdleOps.Shared.Capture;
 using IdleOps.Shared.Logging;
 using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
 using playbk.Model;
+using vidcap.Services;
+using audcap.Services;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 using YamlDotNet.Serialization;
@@ -58,7 +61,37 @@ public sealed class ScriptRunner : IDisposable
 
         Directory.CreateDirectory(_outputDir);
 
+        // Optional media capture for the whole run. Each capturer runs on its own
+        // timer (_captureTimerSeconds) in parallel with the steps; we await them
+        // after the steps so the recording spans the flow.
+        Task<CaptureResult>? videoTask = null;
+        Task<CaptureResult>? audioTask = null;
+        if (script.Vidcap)
+        {
+            var videoPath = Path.Combine(_outputDir, $"{Sanitize(scriptName)}-video.mp4");
+            videoTask = VidcapService.CaptureAsync(videoPath, timerSeconds: _captureTimerSeconds, token: token);
+        }
+        if (script.Audcap)
+        {
+            var audioPath = Path.Combine(_outputDir, $"{Sanitize(scriptName)}-audio.wav");
+            audioTask = AudcapService.CaptureAsync(audioPath, timerSeconds: _captureTimerSeconds, token: token);
+        }
+
         var success = await RunStepsAsync(script, scriptName, token, scriptPath);
+
+        foreach (var capture in new[] { videoTask, audioTask })
+        {
+            if (capture is null)
+            {
+                continue;
+            }
+
+            var result = await capture;
+            if (result.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"Capture exited with code {result.ExitCode}: {result.OutputPath}");
+            }
+        }
 
         return success ? 0 : 1;
     }
@@ -214,7 +247,7 @@ public sealed class ScriptRunner : IDisposable
         return true;
     }
 
-    private static async Task<bool> RunWaitWindowAsync(Step step, CancellationToken token)
+    private async Task<bool> RunWaitWindowAsync(Step step, CancellationToken token)
     {
         var pattern = step.Window ?? step.Args;
         if (string.IsNullOrWhiteSpace(pattern))
@@ -224,6 +257,15 @@ public sealed class ScriptRunner : IDisposable
         }
 
         var timeoutSeconds = step.Timeout ?? 10;
+
+        // If text: is set, delegate to waitfr.exe so OCR polling actually runs.
+        // The in-process handle-only path below silently ignores text:, which
+        // misled consumers into thinking the wait would block on text appearing.
+        if (!string.IsNullOrWhiteSpace(step.Text))
+        {
+            return await RunWaitWindowWithTextAsync(pattern, step.Text, timeoutSeconds, token);
+        }
+
         var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
 
         ConsoleLogger.Info($"  Waiting for window '{pattern}' (timeout {timeoutSeconds:0.#}s)...");
@@ -241,6 +283,146 @@ public sealed class ScriptRunner : IDisposable
 
         ConsoleLogger.Warn($"wait-window: timed out after {timeoutSeconds:0.#}s waiting for '{pattern}'.");
         return false;
+    }
+
+    private async Task<bool> RunWaitWindowWithTextAsync(string pattern, string text, double timeoutSeconds, CancellationToken token)
+    {
+        var waitfrPath = ResolveExecutable("waitfr") ?? ResolveExecutable("waitfr.exe");
+        if (waitfrPath is null)
+        {
+            ConsoleLogger.Warn("wait-window: text: requires waitfr, but it was not found on PATH. Ensure playbk is built with solution.");
+            return false;
+        }
+
+        ConsoleLogger.Info($"  Waiting for text '{text}' in window '{pattern}' (timeout {timeoutSeconds:0.#}s)...");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = waitfrPath,
+            Arguments = $"-w \"{pattern}\" -t \"{text}\" --timeout {timeoutSeconds:0.###}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null)
+            {
+                ConsoleLogger.Warn("wait-window: failed to start waitfr process.");
+                return false;
+            }
+
+            var stderrTask = process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            var stderr = await stderrTask;
+
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                foreach (var line in stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    ConsoleLogger.Info($"  {line.TrimEnd()}");
+                }
+            }
+
+            if (process.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"wait-window: text '{text}' not found in window '{pattern}' within {timeoutSeconds:0.#}s.");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"wait-window: waitfr failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    private async Task<bool> RunSpeakAsync(Step step, CancellationToken token)
+    {
+        var text = step.Text ?? step.Args;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ConsoleLogger.Warn("speak: no text specified (use text: or args).");
+            return false;
+        }
+
+        var spkbakPath = ResolveExecutable("spkbak") ?? ResolveExecutable("spkbak.exe");
+        if (spkbakPath is null)
+        {
+            ConsoleLogger.Warn("speak: spkbak not found on PATH. Ensure playbk is built with solution.");
+            return false;
+        }
+
+        var args = new List<string> { "--text", $"\"{text.Replace("\"", "\\\"")}\"" };
+
+        if (!string.IsNullOrWhiteSpace(step.Output))
+        {
+            var outputPath = Path.IsPathRooted(step.Output) ? step.Output : Path.Combine(_outputDir, step.Output);
+            outputPath = Path.GetFullPath(outputPath);
+            args.Add("--output");
+            args.Add($"\"{outputPath}\"");
+        }
+
+        if (!string.IsNullOrWhiteSpace(step.Voice))
+        {
+            args.Add("--voice");
+            args.Add($"\"{step.Voice}\"");
+        }
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = spkbakPath,
+            Arguments = string.Join(' ', args),
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+
+        var preview = text.Length > 60 ? text[..60] + "..." : text;
+        ConsoleLogger.Info($"  Speaking: \"{preview}\"{(step.Output is null ? "" : $" → {step.Output}")}");
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null)
+            {
+                ConsoleLogger.Warn("speak: failed to start spkbak process.");
+                return false;
+            }
+
+            var stderrTask = process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            var stderr = await stderrTask;
+
+            if (!string.IsNullOrWhiteSpace(stderr))
+            {
+                foreach (var line in stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    ConsoleLogger.Info($"  {line.TrimEnd()}");
+                }
+            }
+
+            if (process.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"speak: spkbak exited with code {process.ExitCode}.");
+                return false;
+            }
+
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"speak: spkbak failed: {ex.Message}");
+            return false;
+        }
     }
 
     [SupportedOSPlatform("windows")]
@@ -479,6 +661,16 @@ public sealed class ScriptRunner : IDisposable
                 case "click-text":
                     {
                         var ok = await RunClickTextAsync(step, token);
+                        if (!ok)
+                        {
+                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
+                            return false;
+                        }
+                        break;
+                    }
+                case "speak":
+                    {
+                        var ok = await RunSpeakAsync(step, token);
                         if (!ok)
                         {
                             ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
