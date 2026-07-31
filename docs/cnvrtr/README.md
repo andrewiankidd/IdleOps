@@ -1,5 +1,7 @@
 # cnvrtr — Universal Converter
 
+> **Platform:** 🟢 Windows · 🟢 Linux · 🟢 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Convert between encodings, units, date formats, number bases, and file formats.
 
 ## Usage

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json
 # mspaint-smiley — launch Paint, draw a smiley face, record
 # Note: Paint tool selection uses OCR where possible, falls back to percentage coords
 # for the drawing canvas. Works best on default Paint window size.

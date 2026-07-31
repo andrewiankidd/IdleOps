@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
 using inpctl.Cli;
 using inpctl.Input;
@@ -20,11 +21,7 @@ internal static class Program
             return options.HasAction ? 0 : 1;
         }
 
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        {
-            Console.Error.WriteLine("[inpctl] Windows-only at the moment.");
-            return 1;
-        }
+        if (!PlatformSupport.EnsureWindows("inpctl")) return 1;
 
         if (options.SendCtrlC)
         {
@@ -46,10 +43,19 @@ internal static class Program
             return 1;
         }
 
-        if (!FocusWindow(hwnd))
+        // Background input posts messages to the target without stealing focus.
+        // Foreground input (default) uses SendInput, which requires the window up front.
+        if (!options.Background)
         {
-            Console.Error.WriteLine("[inpctl] Could not focus target window; sending input anyway.");
+            if (!FocusWindow(hwnd))
+            {
+                Console.Error.WriteLine("[inpctl] Could not focus target window; sending input anyway.");
+            }
         }
+
+        // SendInput ignores hwnd (it hits the focused control); PostMessage needs the
+        // focused child window of the target's thread, not the top-level frame.
+        var inputTarget = options.Background ? ResolveInputTarget(hwnd) : hwnd;
 
         // Window management (before input actions)
         if (options.Maximize) { Console.WriteLine("[inpctl] Maximizing window."); ShowWindow(hwnd, 3); }
@@ -82,10 +88,10 @@ internal static class Program
 
         // Input actions
         if (options.Keyboard is not null)
-        { Console.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}"); if (!InputSender.SendKeyboard(options.Keyboard, hwnd)) return 1; }
+        { Console.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}{(options.Background ? " (background)" : "")}"); if (!InputSender.SendKeyboard(options.Keyboard, inputTarget, options.Background)) return 1; }
 
         if (options.Type is not null)
-        { Console.WriteLine($"[inpctl] Typing text: {options.Type}"); if (!InputSender.TypeText(options.Type, hwnd)) return 1; }
+        { Console.WriteLine($"[inpctl] Typing text: {options.Type}{(options.Background ? " (background)" : "")}"); if (!InputSender.TypeText(options.Type, inputTarget, options.Background)) return 1; }
 
         if (options.LeftMouse is not null)
         { Console.WriteLine($"[inpctl] Left mouse: {options.LeftMouse}"); if (!InputSender.SendMouse(options.LeftMouse, hwnd, MouseButton.Left, options.MoveCursor)) return 1; }
@@ -146,8 +152,26 @@ internal static class Program
         return false;
     }
 
+    // For background posting, find the window that actually holds keyboard focus
+    // within the target's thread (the edit control / render widget), not the frame.
+    // Falls back to the top-level window when the thread has no focused child
+    // (common for an inactive window — background input is best-effort there).
+    private static IntPtr ResolveInputTarget(IntPtr hwnd)
+    {
+        var threadId = GetWindowThreadProcessId(hwnd, IntPtr.Zero);
+        if (threadId == 0) return hwnd;
+
+        var info = new GUITHREADINFO { cbSize = (uint)Marshal.SizeOf<GUITHREADINFO>() };
+        if (GetGUIThreadInfo(threadId, ref info) && info.hwndFocus != IntPtr.Zero)
+        {
+            return info.hwndFocus;
+        }
+        return hwnd;
+    }
+
     // P/Invoke — window management and process control
     [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
     [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
     [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);

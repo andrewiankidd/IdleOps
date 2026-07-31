@@ -24,6 +24,7 @@ internal static class OptionsParser
             .On("--move", v => opts = opts with { Move = v })
             .Flag("--ctrlc", () => opts = opts with { SendCtrlC = true })
             .Flag("--move-cursor", () => opts = opts with { MoveCursor = true })
+            .Flag("--background", () => opts = opts with { Background = true })
             .Flag("--maximize", () => opts = opts with { Maximize = true })
             .Flag("--minimize", () => opts = opts with { Minimize = true })
             .Flag("--restore", () => opts = opts with { Restore = true })

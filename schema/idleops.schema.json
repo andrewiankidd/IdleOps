@@ -1,0 +1,193 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json",
+  "title": "IdleOps playbk runbook",
+  "description": "A playbk automation script (*.idleops.yaml): an ordered list of desktop-automation steps run by the IdleOps `playbk` engine. See https://github.com/andrewiankidd/IdleOps/blob/main/docs/scripting.md",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["steps"],
+  "properties": {
+    "vidcap": {
+      "type": "boolean",
+      "description": "Record screen video (vidcap) for the whole run while the steps execute."
+    },
+    "audcap": {
+      "type": "boolean",
+      "description": "Record system audio (audcap) for the whole run while the steps execute."
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered steps, executed top to bottom. A step returning false halts the run.",
+      "items": { "$ref": "#/definitions/step" }
+    }
+  },
+  "definitions": {
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Optional identifier. If set on an `exec` step, its process id is available as `%id_pid%` in later `exec` args."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable label shown in the console while the step runs."
+        },
+        "action": {
+          "type": "string",
+          "description": "What the step does.",
+          "enum": [
+            "exec",
+            "sleep",
+            "wait-window",
+            "click-text",
+            "assert-text",
+            "type",
+            "screenshot",
+            "speak",
+            "set-value",
+            "assert-value",
+            "invoke",
+            "toggle",
+            "expand",
+            "collapse",
+            "select"
+          ],
+          "enumDescriptions": [
+            "Run a command. `args` is the command line; `wait` controls fire-and-forget vs block-until-exit.",
+            "Delay. Duration in seconds via `args` or `timeout`.",
+            "Poll (waitfr) until a window (and optionally `text`) appears, or `timeout` elapses.",
+            "Find `text` in `window` via OCR (txtfnd) and click it (inpctl).",
+            "Find `text` in `window` via OCR (txtfnd). Fails the step (halting the run) if absent. Read-only sibling of click-text.",
+            "Type `text` into the focused control of `window` (inpctl). Pair with a click-text first if focus is needed.",
+            "Capture `window` to the `output` image file (scrcap). Windows only.",
+            "Speak `text` via text-to-speech (spkbak); optionally save to `output`, pick a `voice`.",
+            "UIA: set the selected element's value to `text` (uiactl). Focus-free; works on WinUI/WPF/UWP/Win32.",
+            "UIA: read the selected element's value and fail unless it equals `text` (uiactl).",
+            "UIA: invoke the selected element - buttons, menu items (uiactl).",
+            "UIA: toggle the selected checkbox / toggle button (uiactl).",
+            "UIA: expand the selected menu / combo / tree item (uiactl).",
+            "UIA: collapse the selected menu / combo / tree item (uiactl).",
+            "UIA: select the selected list item / tab / radio (uiactl)."
+          ]
+        },
+        "args": {
+          "type": "string",
+          "description": "exec: the command line. sleep: duration in seconds. Also a fallback for sleep/wait-window/screenshot/speak when their dedicated field is omitted."
+        },
+        "wait": {
+          "type": "boolean",
+          "description": "exec only: if true, block until the process exits. Default false (fire and forget)."
+        },
+        "window": {
+          "type": "string",
+          "description": "Window title pattern (supports `*` wildcards). Used by wait-window, click-text, assert-text, type, screenshot."
+        },
+        "text": {
+          "type": "string",
+          "description": "click-text/assert-text: text to find via OCR. type: text to type. speak: text to speak. wait-window: optional text to wait for."
+        },
+        "output": {
+          "type": "string",
+          "description": "screenshot: output image path (.png/.jpeg/.bmp). speak: optional output audio path. Relative paths resolve against the run output dir."
+        },
+        "image": {
+          "type": "string",
+          "description": "Reference image path for image-based matching (imgfnd)."
+        },
+        "voice": {
+          "type": "string",
+          "description": "speak only: text-to-speech voice name (spkbak)."
+        },
+        "timeout": {
+          "type": "number",
+          "description": "wait-window: max seconds to wait (default 10). sleep: duration in seconds."
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Extra attempts after the first failure (Ansible/AzureDevOps style). retries: 2 means up to 3 total attempts. Default 0 (fail fast)."
+        },
+        "retry_delay": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Seconds to wait between retry attempts. Default 0. Only meaningful with retries > 0."
+        },
+        "continue_on_error": {
+          "type": "boolean",
+          "description": "If true, a step that still fails after its retries is logged and the run continues instead of halting. Ansible ignore_errors / ADO continueOnError."
+        },
+        "background": {
+          "type": "boolean",
+          "description": "type only: drive the target window via PostMessage without foregrounding it (no focus/cursor steal). Classic Win32 controls only, NOT webviews. Default false (SendInput to the foreground window)."
+        },
+        "automation_id": {
+          "type": "string",
+          "description": "UIA actions: select the target element by AutomationId (preferred selector). Discover ids with `uiactl -w \"...\" --dump`."
+        },
+        "element": {
+          "type": "string",
+          "description": "UIA actions: select the target element by accessibility Name (e.g. a button label like \"Don't save\")."
+        },
+        "control_type": {
+          "type": "string",
+          "description": "UIA actions: select the target element by control type (e.g. Edit, Button, Document, or a numeric UIA id)."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "action": { "const": "exec" } }, "required": ["action"] },
+          "then": { "required": ["args"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "sleep" } }, "required": ["action"] },
+          "then": { "anyOf": [{ "required": ["args"] }, { "required": ["timeout"] }] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "wait-window" } }, "required": ["action"] },
+          "then": { "anyOf": [{ "required": ["window"] }, { "required": ["args"] }] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "click-text" } }, "required": ["action"] },
+          "then": { "required": ["window", "text"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "assert-text" } }, "required": ["action"] },
+          "then": { "required": ["window", "text"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "type" } }, "required": ["action"] },
+          "then": { "required": ["window", "text"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "screenshot" } }, "required": ["action"] },
+          "then": {
+            "required": ["window"],
+            "anyOf": [{ "required": ["output"] }, { "required": ["args"] }]
+          }
+        },
+        {
+          "if": { "properties": { "action": { "const": "speak" } }, "required": ["action"] },
+          "then": { "anyOf": [{ "required": ["text"] }, { "required": ["args"] }] }
+        },
+        {
+          "if": { "properties": { "action": { "enum": ["set-value", "assert-value"] } }, "required": ["action"] },
+          "then": {
+            "required": ["window", "text"],
+            "anyOf": [{ "required": ["automation_id"] }, { "required": ["element"] }, { "required": ["control_type"] }]
+          }
+        },
+        {
+          "if": { "properties": { "action": { "enum": ["invoke", "toggle", "expand", "collapse", "select"] } }, "required": ["action"] },
+          "then": {
+            "required": ["window"],
+            "anyOf": [{ "required": ["automation_id"] }, { "required": ["element"] }, { "required": ["control_type"] }]
+          }
+        }
+      ]
+    }
+  }
+}

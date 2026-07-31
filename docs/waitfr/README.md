@@ -1,5 +1,7 @@
 # waitfr — Wait for Condition
 
+> **Platform:** 🟢 Windows · 🔴 Linux · 🔴 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Wait for a window to appear (or disappear), optionally waiting for specific text via OCR.
 
 ## Usage

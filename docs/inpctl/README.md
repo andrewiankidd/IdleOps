@@ -1,5 +1,7 @@
 # inpctl — Input Control (Windows Only)
 
+> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Send keyboard and mouse input to windows by title. Supports wildcard matching, key chords, text typing, and mouse clicks/drags.
 
 ## Usage

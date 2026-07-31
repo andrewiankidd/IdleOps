@@ -1,5 +1,7 @@
 # imgfnd — Image Template Matching
 
+> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Find a UI element by matching a reference image against a window screenshot. Returns center coordinates.
 
 ## Usage

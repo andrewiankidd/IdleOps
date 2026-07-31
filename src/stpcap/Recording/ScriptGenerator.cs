@@ -1,5 +1,6 @@
 using System.Text;
 using IdleOps.Shared.Windows;
+using IdleOps.Shared.Windows.Uia;
 
 namespace stpcap.Recording;
 
@@ -68,6 +69,12 @@ internal static class ScriptGenerator
                     break;
 
                 case InputEventType.MouseClick:
+                    // Prefer a resilient semantic step (UIA action, then OCR click-text)
+                    // for left clicks; fall back to raw coordinates.
+                    if (evt.Button == "left" && TryAppendSemanticClick(sb, evt))
+                    {
+                        break;
+                    }
                     var btn = evt.Button == "right" ? "--rightmouse" : evt.Button == "middle" ? "--middlemouse" : "--leftmouse";
                     // Convert screen coords to window-relative
                     var (relX, relY) = ToWindowRelative(evt.WindowTitle, evt.X, evt.Y);
@@ -93,6 +100,43 @@ internal static class ScriptGenerator
 
         return sb.ToString();
     }
+
+    // Emit a resilient step for a left click when we captured a UIA element:
+    //   1. a semantic control action (invoke/select/toggle/expand) by selector, else
+    //   2. an OCR click-text by the element's visible label, else
+    //   3. return false so the caller falls back to raw coordinates.
+    internal static bool TryAppendSemanticClick(StringBuilder sb, InputEvent evt)
+    {
+        var el = evt.Element;
+        if (el is null) return false;
+        var win = EscapeYaml(evt.WindowTitle ?? "*");
+
+        if (el.ClickVerb is not null && el.HasSelector)
+        {
+            var (field, value) = !string.IsNullOrEmpty(el.AutomationId)
+                ? ("automation_id", el.AutomationId!)
+                : ("element", el.Name!);
+            var label = el.AutomationId ?? el.Name ?? el.ControlType;
+            sb.AppendLine($"  - name: {Capitalize(el.ClickVerb)} {label}");
+            sb.AppendLine($"    action: {el.ClickVerb}");
+            sb.AppendLine($"    window: \"{win}\"");
+            sb.AppendLine($"    {field}: \"{EscapeYaml(value)}\"");
+            return true;
+        }
+
+        if (!string.IsNullOrEmpty(el.Name))
+        {
+            sb.AppendLine($"  - name: Click \"{el.Name}\"");
+            sb.AppendLine($"    action: click-text");
+            sb.AppendLine($"    window: \"{win}\"");
+            sb.AppendLine($"    text: \"{EscapeYaml(el.Name)}\"");
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string Capitalize(string s) => string.IsNullOrEmpty(s) ? s : char.ToUpperInvariant(s[0]) + s[1..];
 
     private static string BuildCombo(IReadOnlyList<InputEvent> events, int keyIndex)
     {

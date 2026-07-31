@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json
 # notepad-hello-world — launch Notepad, type text, record, close
 #
 # Usage:

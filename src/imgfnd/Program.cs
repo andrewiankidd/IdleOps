@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Runtime.Versioning;
+using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
 using OpenCvSharp;
 
@@ -12,42 +13,22 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        string? window = null;
-        string? imagePath = null;
-        double threshold = 0.8;
-        bool showHelp = false;
-        bool showVersion = false;
-
-        for (var i = 0; i < args.Length; i++)
+        imgfnd.Cli.Options options;
+        try
         {
-            switch (args[i])
-            {
-                case "-w":
-                case "--window":
-                    if (i + 1 >= args.Length) { Console.Error.WriteLine("Missing value for window."); return 1; }
-                    window = args[++i];
-                    break;
-                case "-i":
-                case "--image":
-                    if (i + 1 >= args.Length) { Console.Error.WriteLine("Missing value for image."); return 1; }
-                    imagePath = args[++i];
-                    break;
-                case "--threshold":
-                    if (i + 1 >= args.Length || !double.TryParse(args[++i], out threshold)) { Console.Error.WriteLine("Invalid threshold."); return 1; }
-                    break;
-                case "-h":
-                case "--help":
-                    showHelp = true;
-                    break;
-                case "-v":
-                case "--version":
-                    showVersion = true;
-                    break;
-                default:
-                    Console.Error.WriteLine($"Unknown argument: {args[i]}");
-                    return 1;
-            }
+            options = imgfnd.Cli.OptionsParser.Parse(args);
         }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
+        var window = options.Window;
+        var imagePath = options.ImagePath;
+        var threshold = options.Threshold;
+        var showHelp = options.ShowHelp;
+        var showVersion = options.ShowVersion;
 
         if (showHelp || (string.IsNullOrWhiteSpace(window) && !showVersion) || (string.IsNullOrWhiteSpace(imagePath) && !showVersion))
         {
@@ -74,6 +55,8 @@ internal static class Program
             Console.WriteLine($"imgfnd {typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0"}");
             return 0;
         }
+
+        if (!PlatformSupport.EnsureWindows("imgfnd")) return 1;
 
         if (!File.Exists(imagePath))
         {

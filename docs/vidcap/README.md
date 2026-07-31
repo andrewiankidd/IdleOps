@@ -1,5 +1,7 @@
 # vidcap — Video Capture
 
+> **Platform:** 🟢 Windows · 🟢 Linux · 🟢 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Record the screen or a specific window to MP4.
 
 ## Usage

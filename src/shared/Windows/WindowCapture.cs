@@ -17,6 +17,7 @@ public static class WindowCapture
     /// </summary>
     public static Bitmap CaptureWindow(IntPtr handle)
     {
+        Platform.PlatformSupport.RequireWindows("Window capture");
         var rect = WindowMatcher.GetWindowBounds(handle);
         if (rect.Width <= 0 || rect.Height <= 0)
         {

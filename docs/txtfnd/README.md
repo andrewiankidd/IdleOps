@@ -1,5 +1,7 @@
 # txtfnd — OCR Text Finder
 
+> **Platform:** 🟢 Windows · 🔴 Linux · 🔴 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Find text on screen and return its coordinates, enabling "find and click" automation.
 
 ## Usage

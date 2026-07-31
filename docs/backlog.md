@@ -18,7 +18,7 @@ The flagship use case is "run `playbk` in CI, get a narrated MP4 out." The piece
 
 ## Use cases / demos to add
 
-Current set: `rickroll`, `smiley`, `crosspose-gui-screenshots`. Wanted additions:
+Current set: `rickroll`, `mspaint-smiley`, `notepad-hello-world` (the Crosspose scripts moved to the Crosspose repo's `assets/idleops/`). Wanted additions:
 
 - **IdleOps dogfood walkthrough** — narrate IdleOps using IdleOps. Best possible demo.
 - **Crosspose end-to-end** — full feature tour, narrated, regenerated on every crosspose release

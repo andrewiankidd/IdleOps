@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json
 # Smoke test — exercises built-in playbk actions without requiring a desktop
 # Used by CI to verify the toolkit works end-to-end
 

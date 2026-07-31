@@ -2,6 +2,7 @@ using System.Drawing.Imaging;
 using System.Runtime.Versioning;
 using IdleOps.Shared.Logging;
 using IdleOps.Shared.Windows;
+using waitfr.Cli;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 using Windows.Storage.Streams;
@@ -14,41 +15,22 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
-        string? window = null;
-        string? text = null;
-        double timeout = 10;
-        bool gone = false;
-        bool showHelp = false;
-
-        for (var i = 0; i < args.Length; i++)
+        Options options;
+        try
         {
-            switch (args[i])
-            {
-                case "-w":
-                case "--window":
-                    if (i + 1 >= args.Length) { Console.Error.WriteLine("Missing value for window."); return 1; }
-                    window = args[++i];
-                    break;
-                case "-t":
-                case "--text":
-                    if (i + 1 >= args.Length) { Console.Error.WriteLine("Missing value for text."); return 1; }
-                    text = args[++i];
-                    break;
-                case "--timeout":
-                    if (i + 1 >= args.Length || !double.TryParse(args[++i], out timeout)) { Console.Error.WriteLine("Invalid timeout."); return 1; }
-                    break;
-                case "--gone":
-                    gone = true;
-                    break;
-                case "-h":
-                case "--help":
-                    showHelp = true;
-                    break;
-                default:
-                    Console.Error.WriteLine($"Unknown argument: {args[i]}");
-                    return 1;
-            }
+            options = OptionsParser.Parse(args);
         }
+        catch (ArgumentException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            return 1;
+        }
+
+        var window = options.Window;
+        var text = options.Text;
+        var timeout = options.Timeout;
+        var gone = options.Gone;
+        var showHelp = options.ShowHelp;
 
         if (showHelp || string.IsNullOrWhiteSpace(window))
         {

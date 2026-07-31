@@ -11,10 +11,39 @@ internal static class InputSender
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_SYSKEYUP = 0x0105;
 
-    public static bool SendKeyboard(string tokens, IntPtr hwnd)
+    private const uint INPUT_MOUSE = 0;
+    private const uint INPUT_KEYBOARD = 1;
+
+    // Keyboard input has two backends:
+    //   foreground (default) -> SendInput: injects at the OS input queue, so it
+    //     reaches the truly-focused control (including WebView2/Chromium content).
+    //     The caller must foreground the target window first.
+    //   background            -> PostMessage: delivers to a specific window's queue
+    //     without stealing focus. hwnd must be the focused CHILD control (resolved
+    //     via GetGUIThreadInfo); classic Win32 only, not webviews.
+    public static bool SendKeyboard(string tokens, IntPtr hwnd, bool background)
+    {
+        var sequence = BuildKeySequence(tokens);
+        if (sequence.Count == 0)
+        {
+            return false;
+        }
+
+        return background ? PostKeys(sequence, hwnd) : SendKeys(sequence);
+    }
+
+    public static bool TypeText(string text, IntPtr hwnd, bool background)
+        => background ? TypeTextBackground(text, hwnd) : TypeTextForeground(text);
+
+    internal static bool TryMapKeyForTests(string token, out ushort keyCode) => TryMapKey(token, out keyCode);
+
+    internal static IReadOnlyList<(ushort code, bool keyUp)> BuildKeySequenceForTests(string tokens) => BuildKeySequence(tokens);
+
+    // Parse a key spec ("CTRL+F4, ENTER") into an ordered press/release sequence.
+    private static List<(ushort code, bool keyUp)> BuildKeySequence(string tokens)
     {
         var parts = tokens.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        var messages = new List<(int msg, ushort code, bool keyUp)>();
+        var sequence = new List<(ushort code, bool keyUp)>();
 
         foreach (var part in parts)
         {
@@ -26,56 +55,79 @@ internal static class InputSender
 
                 foreach (var mod in modifierKeys)
                 {
-                    if (TryMapKey(mod, out var modCode))
-                    {
-                        messages.Add((IsAlt(modCode) ? WM_SYSKEYDOWN : WM_KEYDOWN, modCode, false));
-                    }
+                    if (TryMapKey(mod, out var modCode)) sequence.Add((modCode, false));
                 }
 
                 if (TryMapKey(key, out var keyCode))
                 {
-                    messages.Add((IsAlt(keyCode) ? WM_SYSKEYDOWN : WM_KEYDOWN, keyCode, false));
-                    messages.Add((IsAlt(keyCode) ? WM_SYSKEYUP : WM_KEYUP, keyCode, true));
+                    sequence.Add((keyCode, false));
+                    sequence.Add((keyCode, true));
                 }
 
                 foreach (var mod in modifierKeys.Reverse())
                 {
-                    if (TryMapKey(mod, out var modCode))
-                    {
-                        messages.Add((IsAlt(modCode) ? WM_SYSKEYUP : WM_KEYUP, modCode, true));
-                    }
+                    if (TryMapKey(mod, out var modCode)) sequence.Add((modCode, true));
                 }
             }
             else
             {
                 if (TryMapKey(part, out var keyCode))
                 {
-                    messages.Add((IsAlt(keyCode) ? WM_SYSKEYDOWN : WM_KEYDOWN, keyCode, false));
-                    messages.Add((IsAlt(keyCode) ? WM_SYSKEYUP : WM_KEYUP, keyCode, true));
+                    sequence.Add((keyCode, false));
+                    sequence.Add((keyCode, true));
                 }
             }
         }
 
-        if (messages.Count == 0)
-        {
-            return false;
-        }
+        return sequence;
+    }
 
-        foreach (var (msg, code, keyUp) in messages)
+    private static bool SendKeys(List<(ushort code, bool keyUp)> sequence)
+    {
+        var inputs = new List<INPUT>(sequence.Count);
+        foreach (var (code, keyUp) in sequence)
         {
+            var flags = keyUp ? KeyEventFlags.KEYUP : 0;
+            if (IsExtended(code)) flags |= KeyEventFlags.EXTENDEDKEY;
+            inputs.Add(BuildKey(code, 0, flags));
+        }
+        return Send(inputs);
+    }
+
+    private static bool PostKeys(List<(ushort code, bool keyUp)> sequence, IntPtr hwnd)
+    {
+        foreach (var (code, keyUp) in sequence)
+        {
+            var msg = IsAlt(code)
+                ? (keyUp ? WM_SYSKEYUP : WM_SYSKEYDOWN)
+                : (keyUp ? WM_KEYUP : WM_KEYDOWN);
             if (!PostMessage(hwnd, msg, code, keyUp ? 0xC0000001u : 0x00000001u))
             {
                 Console.Error.WriteLine("Failed to send keyboard message.");
                 return false;
             }
         }
-
         return true;
     }
 
-    internal static bool TryMapKeyForTests(string token, out ushort keyCode) => TryMapKey(token, out keyCode);
+    // Foreground typing: Unicode SendInput. Works for any char in any focused
+    // control regardless of keyboard layout, and drives Chromium/WebView2 content.
+    private static bool TypeTextForeground(string text)
+    {
+        if (text.Length == 0) return true;
 
-    public static bool TypeText(string text, IntPtr hwnd)
+        var inputs = new List<INPUT>(text.Length * 2);
+        foreach (var ch in text)
+        {
+            inputs.Add(BuildKey(0, ch, KeyEventFlags.UNICODE));
+            inputs.Add(BuildKey(0, ch, KeyEventFlags.UNICODE | KeyEventFlags.KEYUP));
+        }
+        return Send(inputs);
+    }
+
+    // Background typing: WM_KEYDOWN/WM_CHAR/WM_KEYUP posted to the focused child.
+    // Classic Win32 edit controls only; webviews ignore synthetic WM_CHAR.
+    private static bool TypeTextBackground(string text, IntPtr hwnd)
     {
         foreach (var ch in text)
         {
@@ -118,6 +170,10 @@ internal static class InputSender
 
         return true;
     }
+
+    // Keys that require KEYEVENTF_EXTENDEDKEY for correct SendInput behaviour:
+    // the navigation cluster and Delete (0x21 PageUp .. 0x28 Down, 0x2E Delete).
+    private static bool IsExtended(ushort code) => (code >= 0x21 && code <= 0x28) || code == 0x2E;
 
     public static bool SendMouse(string coords, IntPtr hwnd, MouseButton button, bool moveCursor)
     {
@@ -243,8 +299,14 @@ internal static class InputSender
 
     private static INPUT BuildMouse(int absX, int absY, MouseEventFlags flags) => new()
     {
-        type = 0,
+        type = INPUT_MOUSE,
         U = new InputUnion { mi = new MOUSEINPUT { dx = absX, dy = absY, dwFlags = flags, dwExtraInfo = UIntPtr.Zero } }
+    };
+
+    private static INPUT BuildKey(ushort vk, ushort scan, KeyEventFlags flags) => new()
+    {
+        type = INPUT_KEYBOARD,
+        U = new InputUnion { ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags, time = 0, dwExtraInfo = UIntPtr.Zero } }
     };
 
     internal static bool TryMapKey(string token, out ushort keyCode)

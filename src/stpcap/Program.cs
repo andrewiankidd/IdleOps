@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using System.Text;
 using IdleOps.Shared.Logging;
+using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
 using stpcap.Recording;
 
@@ -57,6 +58,8 @@ internal static class Program
             return 0;
         }
 
+        if (!PlatformSupport.EnsureWindows("stpcap")) return 1;
+
         Console.WriteLine($"[stpcap] Recording input to '{output}'...");
         Console.WriteLine("[stpcap] Press Ctrl+C to stop and save.");
         if (windowFilter is not null)
@@ -76,10 +79,18 @@ internal static class Program
 
         try
         {
-            // Message pump — required for low-level hooks
+            // Message pump — REQUIRED for low-level hooks (WH_MOUSE_LL / WH_KEYBOARD_LL):
+            // the OS delivers their callbacks via this thread's message queue, so the
+            // thread must retrieve messages or the hooks never fire. PeekMessage keeps
+            // the loop responsive to Ctrl+C (a plain GetMessage would block indefinitely).
             while (!cts.IsCancellationRequested)
             {
-                Thread.Sleep(100);
+                while (PeekMessage(out var msg, IntPtr.Zero, 0, 0, PM_REMOVE))
+                {
+                    TranslateMessage(ref msg);
+                    DispatchMessage(ref msg);
+                }
+                Thread.Sleep(10);
             }
         }
         finally
@@ -101,4 +112,28 @@ internal static class Program
         Console.WriteLine($"[stpcap] Saved to '{output}'.");
         return 0;
     }
+
+    // Message-pump P/Invoke — required so low-level hooks fire on this thread.
+    private const uint PM_REMOVE = 0x0001;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MSG
+    {
+        public IntPtr Hwnd;
+        public uint Message;
+        public IntPtr WParam;
+        public IntPtr LParam;
+        public uint Time;
+        public int PtX;
+        public int PtY;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool PeekMessage(out MSG msg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
+
+    [DllImport("user32.dll")]
+    private static extern bool TranslateMessage(ref MSG msg);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DispatchMessage(ref MSG msg);
 }

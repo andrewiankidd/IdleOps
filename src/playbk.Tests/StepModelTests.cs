@@ -49,6 +49,40 @@ public class StepModelTests
     }
 
     [Fact]
+    public void DeserializesAssertTextAction()
+    {
+        var yaml = """
+            steps:
+              - name: Verify banner
+                action: assert-text
+                window: "My App*"
+                text: "Connected"
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("assert-text", step.Action);
+        Assert.Equal("My App*", step.Window);
+        Assert.Equal("Connected", step.Text);
+    }
+
+    [Fact]
+    public void DeserializesTypeAction()
+    {
+        var yaml = """
+            steps:
+              - name: Fill URL
+                action: type
+                window: "My App*"
+                text: "http://example.com"
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("type", step.Action);
+        Assert.Equal("My App*", step.Window);
+        Assert.Equal("http://example.com", step.Text);
+    }
+
+    [Fact]
     public void DeserializesScreenshotAction()
     {
         var yaml = """
@@ -142,6 +176,74 @@ public class StepModelTests
         Assert.Null(step.Timeout);
         Assert.Null(step.Id);
         Assert.False(step.Wait);
+        Assert.Equal(0, step.Retries);
+        Assert.Null(step.RetryDelay);
+        Assert.False(step.ContinueOnError);
+        Assert.False(step.Background);
+    }
+
+    [Fact]
+    public void DeserializesRetryFields()
+    {
+        var yaml = """
+            steps:
+              - name: Flaky assert
+                action: assert-text
+                window: "My App*"
+                text: "Connected"
+                retries: 4
+                retry_delay: 2
+                continue_on_error: true
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal(4, step.Retries);
+        Assert.Equal(2, step.RetryDelay);
+        Assert.True(step.ContinueOnError);
+    }
+
+    [Fact]
+    public void DeserializesBackgroundTypeAction()
+    {
+        var yaml = """
+            steps:
+              - name: Type into a hidden window
+                action: type
+                window: "Editor*"
+                text: "hello"
+                background: true
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("type", step.Action);
+        Assert.True(step.Background);
+    }
+
+    [Fact]
+    public void DeserializesUiaSetValueAction()
+    {
+        var yaml = """
+            steps:
+              - name: Fill the URL field
+                action: set-value
+                window: "My App*"
+                automation_id: "UrlField"
+                text: "http://example.com"
+              - name: Save
+                action: invoke
+                window: "My App*"
+                element: "Save"
+              - name: Toggle telemetry
+                action: toggle
+                window: "My App*"
+                control_type: CheckBox
+            """;
+        var script = Deserialize(yaml);
+        Assert.Equal("set-value", script.Steps[0].Action);
+        Assert.Equal("UrlField", script.Steps[0].AutomationId);
+        Assert.Equal("http://example.com", script.Steps[0].Text);
+        Assert.Equal("Save", script.Steps[1].Element);
+        Assert.Equal("CheckBox", script.Steps[2].ControlType);
     }
 
     [Fact]

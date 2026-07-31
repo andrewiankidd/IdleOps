@@ -11,6 +11,7 @@ internal record Options
     public int? Pid { get; init; }
     public bool SendCtrlC { get; init; }
     public bool MoveCursor { get; init; }
+    public bool Background { get; init; }
     public bool ShowHelp { get; init; }
     public string? Resize { get; init; }
     public string? Move { get; init; }

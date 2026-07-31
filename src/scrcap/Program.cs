@@ -2,6 +2,7 @@ using System.Drawing.Imaging;
 using System.Runtime.Versioning;
 using IdleOps.Shared.Cli;
 using IdleOps.Shared.Logging;
+using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
 using scrcap.Cli;
 
@@ -37,6 +38,8 @@ internal static class Program
             HelpPrinter.PrintVersion(help.Name, OptionsParser.VersionText);
             return 0;
         }
+
+        if (!PlatformSupport.EnsureWindows("scrcap")) return 1;
 
         if (string.IsNullOrWhiteSpace(options.Window))
         {

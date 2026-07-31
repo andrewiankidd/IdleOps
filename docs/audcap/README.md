@@ -1,5 +1,7 @@
 # audcap — Audio Capture
 
+> **Platform:** 🟢 Windows · 🟢 Linux · 🟢 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Record system audio (loopback) to a WAV file.
 
 ## Usage

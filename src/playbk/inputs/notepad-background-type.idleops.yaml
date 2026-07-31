@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json
+# notepad-background-type — verify background typing + background screenshot.
+#
+# Launches Notepad (a fresh "Untitled" tab), brings Paint up ON TOP so Notepad is
+# unfocused, then background-types into Notepad via `type: ... background: true`,
+# screenshots the hidden Notepad (PrintWindow, no focus needed), and OCR-asserts
+# the text landed. assert-text is the pass/fail gate.
+#
+# The window match is "*Untitled - Notepad" on purpose: it targets only a fresh
+# Notepad tab, and excludes an already-open file ("foo - Notepad") AND Notepad++
+# ("... - Notepad++"), so it won't collide with other open windows.
+#
+# CAVEAT: background typing posts WM_CHAR to the focused child control, which works
+# on classic Win32 edit controls. Windows 11's Store Notepad is a WinUI app and may
+# ignore posted input; if assert-text fails there, that's the WinUI limitation, not
+# a regression (a classic Win32 editor like Notepad++ is the ideal target).
+#
+# Usage:
+#   src/playbk/bin/Debug/net10.0/playbk.exe -i src/playbk/inputs/notepad-background-type.idleops.yaml -o ./outputs
+
+steps:
+  - id: notepad
+    name: Launch Notepad (fresh Untitled tab)
+    action: exec
+    args: notepad.exe
+    wait: false
+
+  - name: Wait for the Untitled Notepad window
+    action: wait-window
+    window: "*Untitled - Notepad"
+    timeout: 10
+
+  - name: Let Notepad settle
+    action: sleep
+    args: "1"
+
+  - id: paint
+    name: Launch Paint on top (steals foreground from Notepad)
+    action: exec
+    args: mspaint.exe
+    wait: false
+
+  - name: Wait for Paint window
+    action: wait-window
+    window: "*Paint*"
+    timeout: 15
+
+  - name: Let Paint take foreground
+    action: sleep
+    args: "2"
+
+  - name: Background-type into the now-unfocused Notepad
+    action: type
+    window: "*Untitled - Notepad"
+    text: "idleops background typing"
+    background: true
+    retries: 2
+    retry_delay: 1
+
+  - name: Let the text render
+    action: sleep
+    args: "1"
+
+  - name: Screenshot the unfocused Notepad (background capture)
+    action: screenshot
+    window: "*Untitled - Notepad"
+    output: notepad-background.png
+
+  - name: Verify the typed text landed in the background window
+    action: assert-text
+    window: "*Untitled - Notepad"
+    text: "background"
+    retries: 3
+    retry_delay: 1
+
+  # --- Cleanup (best-effort; only runs if the assertion passed) ---------------
+  - name: Close Paint
+    action: exec
+    args: inpctl.exe --window "*Paint*" --keyboard "ALT+F4"
+    wait: true
+    continue_on_error: true
+
+  - name: Close just the Untitled tab (leaves other tabs alone)
+    action: exec
+    args: inpctl.exe --window "*Untitled - Notepad" --keyboard "CTRL+W"
+    wait: true
+    continue_on_error: true
+
+  - name: Dismiss save prompt if it appears (Don't Save)
+    action: click-text
+    window: "*Untitled - Notepad"
+    text: "Don"
+    continue_on_error: true

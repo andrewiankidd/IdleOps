@@ -2,7 +2,10 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- Windows TFM so OCR (Windows.Media.Ocr, via shared.win) can be linked
+         in-process rather than shelled out per step. All of playbk's real actions
+         (click-text, type, screenshot, UIA) are Windows-only already. -->
+    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -18,13 +21,16 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\shared.csproj" />
+    <ProjectReference Include="..\shared.win\shared.win.csproj" />
     <ProjectReference Include="..\outcap\outcap.csproj" />
     <ProjectReference Include="..\inpctl\inpctl.csproj" />
+    <ProjectReference Include="..\uiactl\uiactl.csproj" />
   </ItemGroup>
 
   <PropertyGroup>
     <OutcapBinDir>$(MSBuildThisFileDirectory)..\outcap\bin\$(Configuration)\net10.0\</OutcapBinDir>
     <InpctlBinDir>$(MSBuildThisFileDirectory)..\inpctl\bin\$(Configuration)\net10.0\</InpctlBinDir>
+    <UiactlBinDir>$(MSBuildThisFileDirectory)..\uiactl\bin\$(Configuration)\net10.0\</UiactlBinDir>
     <TxtfndBinDir>$(MSBuildThisFileDirectory)..\txtfnd\bin\$(Configuration)\net10.0-windows10.0.22621.0\</TxtfndBinDir>
     <ScrcapBinDir>$(MSBuildThisFileDirectory)..\scrcap\bin\$(Configuration)\net10.0\</ScrcapBinDir>
     <WaitfrBinDir>$(MSBuildThisFileDirectory)..\waitfr\bin\$(Configuration)\net10.0-windows10.0.22621.0\</WaitfrBinDir>
@@ -34,6 +40,7 @@
   <ItemGroup>
     <OutcapFiles Include="$(OutcapBinDir)**\*.*" />
     <InpctlFiles Include="$(InpctlBinDir)**\*.*" />
+    <UiactlFiles Include="$(UiactlBinDir)**\*.*" />
     <TxtfndFiles Include="$(TxtfndBinDir)**\*.*" />
     <ScrcapFiles Include="$(ScrcapBinDir)**\*.*" />
     <WaitfrFiles Include="$(WaitfrBinDir)**\*.*" />
@@ -51,6 +58,13 @@
     <Message Text="Copying inpctl build outputs to playbk bin..." Importance="low" />
     <Copy SourceFiles="@(InpctlFiles)"
           DestinationFolder="$(OutputPath)\%(InpctlFiles.RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyUiactlToPlaybkOutput" AfterTargets="Build" Condition="Exists('$(UiactlBinDir)')">
+    <Message Text="Copying uiactl build outputs to playbk bin..." Importance="low" />
+    <Copy SourceFiles="@(UiactlFiles)"
+          DestinationFolder="$(OutputPath)\%(UiactlFiles.RecursiveDir)"
           SkipUnchangedFiles="true" />
   </Target>
 

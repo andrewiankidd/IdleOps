@@ -11,7 +11,7 @@ YAML script execution engine. Reads `.idleops.yaml` scripts that define sequenti
 | Type | Purpose |
 |------|---------|
 | `Script` | Deserialized YAML root: collection of `Step` objects |
-| `Step` | Id (optional), Name, Action (`exec`), Args, Wait (bool) |
+| `Step` | Id (optional), Name, Action, Args, Wait, plus Window/Text/Output/Image/Voice/Timeout for built-in actions |
 | `ScriptRunner` | Loads YAML (UnderscoredNamingConvention), executes steps, manages process PIDs, expands `%id_pid%` tokens |
 | `Options` | InputPatterns (glob), OutputDirectory |
 | `OptionsParser` | Uses `Microsoft.Extensions.FileSystemGlobbing.Matcher` for input file resolution |
@@ -22,10 +22,16 @@ YAML script execution engine. Reads `.idleops.yaml` scripts that define sequenti
 steps:
   - id: myapp          # optional — enables %myapp_pid% token in later steps
     name: Launch App
-    action: exec        # currently the only action type
+    action: exec        # exec | sleep | wait-window | click-text | assert-text | type | screenshot | speak
     args: notepad.exe
     wait: false         # false = fire-and-forget, true = wait for exit
+    retries: 0          # extra attempts after first failure (Ansible/ADO style); retry_delay: seconds between
+    continue_on_error: false  # if true, log failure and keep going instead of halting
 ```
+
+Retry/error-handling fields (`retries`, `retry_delay`, `continue_on_error`) apply to
+**any** action and are handled centrally in `RunStepWithRetryAsync` wrapping
+`DispatchStepAsync` — individual `RunXAsync` handlers stay retry-agnostic.
 
 ## Execution Details
 

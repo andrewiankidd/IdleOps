@@ -61,7 +61,7 @@ correctly.
    document that users should use `exec: waitfr.exe` for OCR waits
 
 Option 1 is the least surprising. The examples in
-`src/playbk/inputs/crosspose-gui-screenshots.idleops.yaml` already use
+`src/playbk/inputs/notepad-hello-world.idleops.yaml` already use
 `wait-window` without `text:` — they don't hit this bug — but a new
 playbook author would reasonably assume the field works.
 

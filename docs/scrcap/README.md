@@ -1,5 +1,7 @@
 # scrcap — Screenshot Capture
 
+> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Capture a window screenshot and save to file.
 
 ## Usage

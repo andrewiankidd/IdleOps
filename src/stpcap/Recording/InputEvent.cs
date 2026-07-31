@@ -1,3 +1,5 @@
+using IdleOps.Shared.Windows.Uia;
+
 namespace stpcap.Recording;
 
 internal enum InputEventType
@@ -21,4 +23,7 @@ internal sealed record InputEvent(
     int Y = 0,
     int EndX = 0,
     int EndY = 0,
-    string Button = "left");
+    string Button = "left",
+    // UIA element under the cursor at click time (null if unavailable) — enables
+    // recording resilient semantic steps instead of raw coordinates.
+    ElementInfo? Element = null);

@@ -1,8 +1,7 @@
 using txtfnd.Cli;
-using txtfnd.Ocr;
 using IdleOps.Shared.Cli;
 using IdleOps.Shared.Logging;
-using IdleOps.Shared.Windows;
+using IdleOps.Shared.Win;
 
 namespace txtfnd;
 
@@ -47,27 +46,27 @@ internal static class Program
             return 1;
         }
 
-        var match = WindowMatcher.FindWindow(options.Window, preferNewest: true);
-        if (match is null)
+        var finder = new WindowTextFinder();
+        var title = finder.ResolveTitle(options.Window);
+        if (title is null)
         {
             ConsoleLogger.Error($"Window '{options.Window}' not found.");
             return 1;
         }
 
         // Status messages go to stderr so stdout is clean for piping
-        Console.Error.WriteLine($"[txtfnd] Capturing window '{match.Title}' for OCR...");
+        Console.Error.WriteLine($"[txtfnd] Capturing window '{title}' for OCR...");
 
         try
         {
-            using var bitmap = WindowCapture.CaptureWindow(match.Handle);
-            var coords = await OcrService.FindTextAsync(bitmap, options.Text);
+            var coords = await finder.FindAsync(options.Window, options.Text);
 
             if (coords is null)
             {
-                Console.Error.WriteLine($"[txtfnd] Text '{options.Text}' not found in window '{match.Title}'.");
+                Console.Error.WriteLine($"[txtfnd] Text '{options.Text}' not found in window '{title}'.");
 
                 // Debug: show what was recognized
-                var all = await OcrService.RecognizeAllAsync(bitmap);
+                var all = await finder.RecognizeAllAsync(options.Window);
                 if (all.Count > 0)
                 {
                     Console.Error.WriteLine("[txtfnd] Recognized text:");

@@ -10,11 +10,12 @@ Shared class library providing cross-cutting utilities used by all IdleOps tools
 
 | Namespace | Key Types | Purpose |
 |-----------|-----------|---------|
-| `IdleOps.Shared.Platform` | `HostPlatform` enum, `HostInfo` | OS detection via `RuntimeInformation.IsOSPlatform` |
+| `IdleOps.Shared.Platform` | `HostPlatform` enum, `HostInfo`, `PlatformSupport` | OS detection; `PlatformSupport.EnsureWindows` (CLI guard, `[SupportedOSPlatformGuard]`) / `RequireWindows` (throws `PlatformNotSupportedException`) for consistent Windows-only gaps |
 | `IdleOps.Shared.Logging` | `ConsoleLogger` | Simple Info/Warn/Error to stdout/stderr |
 | `IdleOps.Shared.Cli` | `HelpContent` record, `HelpPrinter` | Structured help data and formatted console output |
 | `IdleOps.Shared.Capture` | `CaptureResult` record | OutputPath, StartTimeUtc, ExitCode for capture operations |
 | `IdleOps.Shared.Windows` | `WindowMatcher`, `WindowCapture`, `WindowInfo`, `RECT` | Window enumeration, wildcard matching, screenshot capture (Windows-only) |
+| `IdleOps.Shared.Windows.Uia` | `UiaAutomation`, `ElementInfo`, `ControlTypes`, `Selector` | Element automation via UI Automation — element-at-point, set-value/invoke/toggle/etc. Raw COM interop (internal), Windows-only. Shared by uiactl (CLI) and stpcap (recorder) |
 
 ## Windows Namespace Details
 

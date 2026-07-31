@@ -1,3 +1,4 @@
+using IdleOps.Shared.Windows.Uia;
 using stpcap.Recording;
 using Xunit;
 
@@ -5,6 +6,69 @@ namespace stpcap.Tests;
 
 public class ScriptGeneratorTests
 {
+    private static InputEvent LeftClick(string window, ElementInfo? element) =>
+        new(InputEventType.MouseClick, DateTime.UtcNow, window, X: 100, Y: 200, Button: "left", Element: element);
+
+    [Fact]
+    public void SemanticClick_InvokeByAutomationId()
+    {
+        var el = new ElementInfo("Button", "SaveButton", "Save", ["invoke"]);
+        var yaml = ScriptGenerator.Generate([LeftClick("My App*", el)]);
+        Assert.Contains("action: invoke", yaml);
+        Assert.Contains("automation_id: \"SaveButton\"", yaml);
+        Assert.DoesNotContain("--leftmouse", yaml);
+    }
+
+    [Fact]
+    public void SemanticClick_InvokeByName_WhenNoAutomationId()
+    {
+        var el = new ElementInfo("Button", null, "Don't save", ["invoke"]);
+        var yaml = ScriptGenerator.Generate([LeftClick("App*", el)]);
+        Assert.Contains("action: invoke", yaml);
+        Assert.Contains("element: \"Don't save\"", yaml);
+    }
+
+    [Fact]
+    public void SemanticClick_ToggleForCheckbox()
+    {
+        var el = new ElementInfo("CheckBox", "TelemetryToggle", "Enable telemetry", ["toggle"]);
+        var yaml = ScriptGenerator.Generate([LeftClick("App*", el)]);
+        Assert.Contains("action: toggle", yaml);
+        Assert.Contains("automation_id: \"TelemetryToggle\"", yaml);
+    }
+
+    [Fact]
+    public void SemanticClick_FallsBackToClickText_WhenNoVerbButHasName()
+    {
+        var el = new ElementInfo("Text", null, "Welcome", []);
+        var yaml = ScriptGenerator.Generate([LeftClick("App*", el)]);
+        Assert.Contains("action: click-text", yaml);
+        Assert.Contains("text: \"Welcome\"", yaml);
+        Assert.DoesNotContain("--leftmouse", yaml);
+    }
+
+    [Fact]
+    public void SemanticClick_FallsBackToCoordinates_WhenNoVerbNoName()
+    {
+        var el = new ElementInfo("Pane", null, null, []);
+        var yaml = ScriptGenerator.Generate([LeftClick("App*", el)]);
+        Assert.Contains("--leftmouse", yaml);
+        Assert.DoesNotContain("action: invoke", yaml);
+    }
+
+    [Fact]
+    public void RightClickWithElement_StaysCoordinates()
+    {
+        var el = new ElementInfo("Button", "X", "X", ["invoke"]);
+        var events = new List<InputEvent>
+        {
+            new(InputEventType.MouseClick, DateTime.UtcNow, "App*", X: 5, Y: 5, Button: "right", Element: el)
+        };
+        var yaml = ScriptGenerator.Generate(events);
+        Assert.Contains("--rightmouse", yaml);
+        Assert.DoesNotContain("action: invoke", yaml);
+    }
+
     [Fact]
     public void EmptyEventsProducesMinimalYaml()
     {

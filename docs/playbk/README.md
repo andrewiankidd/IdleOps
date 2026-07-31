@@ -1,5 +1,7 @@
 # playbk — Script Execution Engine
 
+> **Platform:** 🟢 Windows · 🔴 Linux · 🔴 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Execute YAML automation scripts that drive desktop workflows — launching apps, sending input, and capturing media.
 
 ## Usage

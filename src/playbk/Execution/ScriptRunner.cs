@@ -5,6 +5,7 @@ using IdleOps.Shared.Capture;
 using IdleOps.Shared.Logging;
 using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows;
+using IdleOps.Shared.Win;
 using playbk.Model;
 using vidcap.Services;
 using audcap.Services;
@@ -23,6 +24,9 @@ public sealed class ScriptRunner : IDisposable
     private readonly Dictionary<string, int> _stepPids = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Process> _stepProcesses = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Task> _backgroundTasks = [];
+    // Warm OCR text finder, created on first click-text/assert-text and reused so
+    // the OCR engine initializes once per run instead of once per step.
+    private WindowTextFinder? _textFinder;
 
     public ScriptRunner(string baseDir, string outputDir, int captureTimerSeconds = 10)
     {
@@ -103,7 +107,7 @@ public sealed class ScriptRunner : IDisposable
             return true;
         }
 
-        var expanded = ExpandPidTokens(commandOrUrl);
+        var expanded = ExpandPidTokens(commandOrUrl, _stepPids);
         expanded = NormalizeExecutable(expanded);
         var psi = new ProcessStartInfo
         {
@@ -480,6 +484,44 @@ public sealed class ScriptRunner : IDisposable
         }
     }
 
+    // Single-shot OCR: locate `text` in `window` in-process (shared.win
+    // WindowTextFinder, which reuses one warm OCR engine across steps), returning
+    // the window-relative "x,y" click coordinates on success, or null if not found /
+    // on error (logged under `action` for context). Shared by click-text (find →
+    // click) and assert-text (find → pass/fail). NOTE: wait-window's `text:` path
+    // deliberately uses waitfr (which polls), not this single-shot path.
+    private async Task<string?> FindTextViaOcrAsync(string window, string text, string action)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            ConsoleLogger.Warn($"{action}: OCR is Windows-only.");
+            return null;
+        }
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        ConsoleLogger.Info($"  OCR: searching for '{text}' in window '{window}'...");
+
+        try
+        {
+            _textFinder ??= new WindowTextFinder();
+            var coords = await _textFinder.FindAsync(window, text);
+            if (coords is null)
+            {
+                ConsoleLogger.Warn($"{action}: text '{text}' not found in window '{window}' ({sw.ElapsedMilliseconds}ms).");
+                return null;
+            }
+
+            var result = $"{coords.Value.x},{coords.Value.y}";
+            ConsoleLogger.Info($"  OCR: found '{text}' at {result} ({sw.ElapsedMilliseconds}ms)");
+            return result;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"{action}: OCR failed: {ex.GetType().Name} (0x{ex.HResult:X8}) {ex.Message}");
+            return null;
+        }
+    }
+
     private async Task<bool> RunClickTextAsync(Step step, CancellationToken token)
     {
         var pattern = step.Window;
@@ -496,13 +538,6 @@ public sealed class ScriptRunner : IDisposable
             return false;
         }
 
-        var txtfndPath = ResolveExecutable("txtfnd") ?? ResolveExecutable("txtfnd.exe");
-        if (txtfndPath is null)
-        {
-            ConsoleLogger.Warn("click-text: txtfnd not found on PATH. Ensure playbk is built with solution.");
-            return false;
-        }
-
         var inpctlPath = ResolveExecutable("inpctl") ?? ResolveExecutable("inpctl.exe");
         if (inpctlPath is null)
         {
@@ -511,66 +546,14 @@ public sealed class ScriptRunner : IDisposable
         }
 
         // Phase 1: OCR — find text coordinates
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        ConsoleLogger.Info($"  OCR: searching for '{searchText}' in window '{pattern}'...");
-
-        var psi = new ProcessStartInfo
+        var coords = await FindTextViaOcrAsync(pattern, searchText, "click-text");
+        if (coords is null)
         {
-            FileName = txtfndPath,
-            Arguments = $"-w \"{pattern}\" -t \"{searchText}\"",
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            WorkingDirectory = _outputDir
-        };
-
-        string coords;
-        try
-        {
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                ConsoleLogger.Warn("click-text: failed to start txtfnd process.");
-                return false;
-            }
-
-            // Hard timeout: kill txtfnd if it doesn't finish in 15 seconds
-            if (!process.WaitForExit(15000))
-            {
-                ConsoleLogger.Warn($"click-text: txtfnd timed out after 15s searching for '{searchText}'. Killing process.");
-                process.Kill(true);
-                return false;
-            }
-
-            var stdout = process.StandardOutput.ReadToEnd();
-            var stderr = process.StandardError.ReadToEnd();
-
-            if (!string.IsNullOrWhiteSpace(stderr))
-            {
-                foreach (var line in stderr.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-                {
-                    ConsoleLogger.Info($"  {line.TrimEnd()}");
-                }
-            }
-
-            coords = stdout.Trim();
-            if (process.ExitCode != 0 || string.IsNullOrWhiteSpace(coords))
-            {
-                ConsoleLogger.Warn($"click-text: text '{searchText}' not found in window '{pattern}' (txtfnd exit {process.ExitCode}, {sw.ElapsedMilliseconds}ms).");
-                return false;
-            }
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            ConsoleLogger.Warn($"click-text: txtfnd failed: {ex.Message}");
             return false;
         }
 
-        ConsoleLogger.Info($"  OCR: found '{searchText}' at {coords} ({sw.ElapsedMilliseconds}ms)");
-
         // Phase 2: Click — send mouse input
-        sw.Restart();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var clickPsi = new ProcessStartInfo
         {
             FileName = inpctlPath,
@@ -610,93 +593,329 @@ public sealed class ScriptRunner : IDisposable
         }
     }
 
+    // Assert that OCR text is present in a window, without clicking - the read-only
+    // sibling of click-text. Fails the step (and stops the flow) when the expected
+    // text isn't found, so scripts can verify UI state. Use `wait-window` with a
+    // `text:` first if the text needs time to appear.
+    private async Task<bool> RunAssertTextAsync(Step step, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+
+        var pattern = step.Window;
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            ConsoleLogger.Warn("assert-text: no window pattern specified.");
+            return false;
+        }
+
+        var searchText = step.Text;
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            ConsoleLogger.Warn("assert-text: no text specified.");
+            return false;
+        }
+
+        // Same OCR find as click-text; assert-text just doesn't click. A null
+        // result (text absent) fails the step and stops the flow.
+        return await FindTextViaOcrAsync(pattern, searchText, "assert-text") is not null;
+    }
+
+    // Type text into a window via inpctl (a first-class alternative to
+    // `exec inpctl --type`). The window must already have focus on the target
+    // field; pair with a click-text on the field first if needed.
+    private async Task<bool> RunTypeAsync(Step step, CancellationToken token)
+    {
+        var pattern = step.Window;
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            ConsoleLogger.Warn("type: no window pattern specified.");
+            return false;
+        }
+
+        var text = step.Text ?? step.Args;
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            ConsoleLogger.Warn("type: no text specified.");
+            return false;
+        }
+
+        var inpctlPath = ResolveExecutable("inpctl") ?? ResolveExecutable("inpctl.exe");
+        if (inpctlPath is null)
+        {
+            ConsoleLogger.Warn("type: inpctl not found on PATH. Ensure playbk is built with solution.");
+            return false;
+        }
+
+        var backgroundArg = step.Background ? " --background" : string.Empty;
+        var psi = new ProcessStartInfo
+        {
+            FileName = inpctlPath,
+            Arguments = $"--window \"{pattern}\" --type \"{text}\"{backgroundArg}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null)
+            {
+                ConsoleLogger.Warn("type: failed to start inpctl process.");
+                return false;
+            }
+
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+
+            if (process.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"type: inpctl failed (exit {process.ExitCode}). stderr: {stderr.Trim()}");
+                return false;
+            }
+
+            ConsoleLogger.Info($"  Typed into '{pattern}'.");
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"type: inpctl failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    // --- UI Automation actions (element-level automation via uiactl) ----------
+    // Resolve "--window ... <selector>" from the step. One selector: automation_id
+    // wins, then element (accessibility Name), then control_type.
+    private string? BuildUiaTarget(Step step, string action)
+    {
+        if (string.IsNullOrWhiteSpace(step.Window))
+        {
+            ConsoleLogger.Warn($"{action}: no window pattern specified.");
+            return null;
+        }
+
+        string selector;
+        if (!string.IsNullOrWhiteSpace(step.AutomationId))
+            selector = $"--automation-id \"{step.AutomationId}\"";
+        else if (!string.IsNullOrWhiteSpace(step.Element))
+            selector = $"--name \"{step.Element}\"";
+        else if (!string.IsNullOrWhiteSpace(step.ControlType))
+            selector = $"--control-type \"{step.ControlType}\"";
+        else
+        {
+            ConsoleLogger.Warn($"{action}: no selector (automation_id / element / control_type) specified.");
+            return null;
+        }
+
+        return $"--window \"{step.Window}\" {selector}";
+    }
+
+    private ProcessStartInfo? BuildUiactlPsi(string arguments, string action)
+    {
+        var uiactlPath = ResolveExecutable("uiactl") ?? ResolveExecutable("uiactl.exe");
+        if (uiactlPath is null)
+        {
+            ConsoleLogger.Warn($"{action}: uiactl not found on PATH. Ensure playbk is built with solution.");
+            return null;
+        }
+        return new ProcessStartInfo
+        {
+            FileName = uiactlPath,
+            Arguments = arguments,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+    }
+
+    private async Task<bool> RunUiaVerbAsync(Step step, string verb, string? value, string action, CancellationToken token)
+    {
+        var target = BuildUiaTarget(step, action);
+        if (target is null) return false;
+
+        var args = value is not null ? $"{target} {verb} \"{value}\"" : $"{target} {verb}";
+        var psi = BuildUiactlPsi(args, action);
+        if (psi is null) return false;
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null) { ConsoleLogger.Warn($"{action}: failed to start uiactl."); return false; }
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            var stdout = await process.StandardOutput.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            foreach (var line in (stderr + stdout).Split('\n', StringSplitOptions.RemoveEmptyEntries))
+                ConsoleLogger.Info($"  {line.TrimEnd()}");
+            if (process.ExitCode != 0) { ConsoleLogger.Warn($"{action}: uiactl exit {process.ExitCode}."); return false; }
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"{action}: uiactl failed: {ex.Message}");
+            return false;
+        }
+    }
+
+    // Reads the target element's value via uiactl and passes only if it equals step.Text.
+    private async Task<bool> RunAssertValueAsync(Step step, CancellationToken token)
+    {
+        var expected = step.Text;
+        if (expected is null)
+        {
+            ConsoleLogger.Warn("assert-value: no expected text specified.");
+            return false;
+        }
+        var target = BuildUiaTarget(step, "assert-value");
+        if (target is null) return false;
+        var psi = BuildUiactlPsi($"{target} --get-value", "assert-value");
+        if (psi is null) return false;
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null) { ConsoleLogger.Warn("assert-value: failed to start uiactl."); return false; }
+            var stdout = await process.StandardOutput.ReadToEndAsync(token);
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            if (process.ExitCode != 0)
+            {
+                if (!string.IsNullOrWhiteSpace(stderr)) ConsoleLogger.Warn($"  {stderr.Trim()}");
+                ConsoleLogger.Warn($"assert-value: uiactl exit {process.ExitCode}.");
+                return false;
+            }
+            var actual = stdout.TrimEnd('\r', '\n');
+            if (actual == expected)
+            {
+                ConsoleLogger.Info($"  assert-value: matched '{expected}'.");
+                return true;
+            }
+            ConsoleLogger.Warn($"assert-value: expected '{expected}' but got '{actual}'.");
+            return false;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"assert-value: uiactl failed: {ex.Message}");
+            return false;
+        }
+    }
+
     private async Task<bool> RunStepsAsync(Script script, string scriptName, CancellationToken token, string scriptPath)
     {
         foreach (var step in script.Steps)
         {
             token.ThrowIfCancellationRequested();
             ConsoleLogger.Info($"Step: {step.Name}");
-            switch (step.Action.ToLowerInvariant())
+
+            var ok = await RunStepWithRetryAsync(step, scriptPath, token);
+            if (!ok)
             {
-                case "exec":
-                    {
-                        var ok = await RunExecAsync(step.Args ?? string.Empty, step.Wait, token, step);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                case "sleep":
-                    {
-                        var ok = await RunSleepAsync(step, token);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                case "wait-window":
-                    {
-                        var ok = await RunWaitWindowAsync(step, token);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                case "screenshot" when OperatingSystem.IsWindows():
-                    {
-                        var ok = RunScreenshot(step);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                case "click-text":
-                    {
-                        var ok = await RunClickTextAsync(step, token);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                case "speak":
-                    {
-                        var ok = await RunSpeakAsync(step, token);
-                        if (!ok)
-                        {
-                            ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
-                            return false;
-                        }
-                        break;
-                    }
-                default:
-                    ConsoleLogger.Warn($"Unknown action '{step.Action}' in '{scriptPath}'.");
-                    return false;
+                if (step.ContinueOnError)
+                {
+                    ConsoleLogger.Warn($"Step '{step.Name}' failed; continuing (continue_on_error).");
+                    continue;
+                }
+
+                ConsoleLogger.Error($"Step '{step.Name}' failed; stopping flow.");
+                return false;
             }
         }
 
         return true;
     }
 
-    private string ExpandPidTokens(string input)
+    // Runs a step, retrying on failure up to step.Retries additional attempts
+    // (Ansible / AzureDevOps style). retries: 0 (default) preserves the original
+    // fail-fast behaviour; retry_delay is the pause between attempts in seconds.
+    private Task<bool> RunStepWithRetryAsync(Step step, string scriptPath, CancellationToken token)
+        => RunWithRetryAsync(step.Retries, step.RetryDelay ?? 0, step.Name,
+               () => DispatchStepAsync(step, scriptPath, token), token);
+
+    // Retry an operation up to `retries` extra attempts (Ansible / AzureDevOps
+    // semantics): total attempts = 1 + max(0, retries). Returns true on the first
+    // success, false once attempts are exhausted. Pure control flow (the attempt is
+    // injected), so it is unit-testable without driving real steps.
+    internal static async Task<bool> RunWithRetryAsync(
+        int retries, double delaySeconds, string label, Func<Task<bool>> attemptAsync, CancellationToken token)
+    {
+        var maxAttempts = 1 + Math.Max(0, retries);
+
+        for (var attempt = 1; ; attempt++)
+        {
+            token.ThrowIfCancellationRequested();
+
+            var ok = await attemptAsync();
+            if (ok)
+            {
+                if (attempt > 1)
+                    ConsoleLogger.Info($"  Step '{label}' succeeded on attempt {attempt}/{maxAttempts}.");
+                return true;
+            }
+
+            if (attempt >= maxAttempts)
+                return false;
+
+            var when = delaySeconds > 0 ? $" retrying in {delaySeconds}s" : " retrying";
+            ConsoleLogger.Warn($"  Step '{label}' failed (attempt {attempt}/{maxAttempts});{when}...");
+            if (delaySeconds > 0)
+                await Task.Delay(TimeSpan.FromSeconds(delaySeconds), token);
+        }
+    }
+
+    private async Task<bool> DispatchStepAsync(Step step, string scriptPath, CancellationToken token)
+    {
+        switch (step.Action.ToLowerInvariant())
+        {
+            case "exec":
+                return await RunExecAsync(step.Args ?? string.Empty, step.Wait, token, step);
+            case "sleep":
+                return await RunSleepAsync(step, token);
+            case "wait-window":
+                return await RunWaitWindowAsync(step, token);
+            case "screenshot" when OperatingSystem.IsWindows():
+                return RunScreenshot(step);
+            case "click-text":
+                return await RunClickTextAsync(step, token);
+            case "assert-text":
+                return await RunAssertTextAsync(step, token);
+            case "type":
+                return await RunTypeAsync(step, token);
+            case "speak":
+                return await RunSpeakAsync(step, token);
+            case "set-value":
+                return await RunUiaVerbAsync(step, "--set-value", step.Text, "set-value", token);
+            case "invoke":
+                return await RunUiaVerbAsync(step, "--invoke", null, "invoke", token);
+            case "toggle":
+                return await RunUiaVerbAsync(step, "--toggle", null, "toggle", token);
+            case "expand":
+                return await RunUiaVerbAsync(step, "--expand", null, "expand", token);
+            case "collapse":
+                return await RunUiaVerbAsync(step, "--collapse", null, "collapse", token);
+            case "select":
+                return await RunUiaVerbAsync(step, "--select", null, "select", token);
+            case "assert-value":
+                return await RunAssertValueAsync(step, token);
+            default:
+                ConsoleLogger.Warn($"Unknown action '{step.Action}' in '{scriptPath}'.");
+                return false;
+        }
+    }
+
+    internal static string ExpandPidTokens(string input, IReadOnlyDictionary<string, int> stepPids)
     {
         return Regex.Replace(input, "%(?<id>[^%]+)_pid%", match =>
         {
             var id = match.Groups["id"].Value;
-            return _stepPids.TryGetValue(id, out var pid) ? pid.ToString() : match.Value;
+            return stepPids.TryGetValue(id, out var pid) ? pid.ToString() : match.Value;
         }, RegexOptions.IgnoreCase);
     }
 
-    private static (string fileName, string? arguments) SplitCommand(string command)
+    internal static (string fileName, string? arguments) SplitCommand(string command)
     {
         var tokens = Tokenize(command);
         if (tokens.Count == 0)
@@ -799,7 +1018,7 @@ public sealed class ScriptRunner : IDisposable
         return null;
     }
 
-    private static List<string> Tokenize(string command)
+    internal static List<string> Tokenize(string command)
     {
         var tokens = new List<string>();
         var pattern = @"[^\s""]+|""[^""]*""";
@@ -815,7 +1034,7 @@ public sealed class ScriptRunner : IDisposable
         return tokens;
     }
 
-    private static string QuoteIfNeeded(string token)
+    internal static string QuoteIfNeeded(string token)
     {
         if (token.Contains(' ') || token.Contains('\t'))
         {
@@ -825,7 +1044,7 @@ public sealed class ScriptRunner : IDisposable
         return token;
     }
 
-    private static string CombineOutput(string stepName, string stdout, string stderr)
+    internal static string CombineOutput(string stepName, string stdout, string stderr)
     {
         var sb = new List<string>();
         if (!string.IsNullOrWhiteSpace(stdout))
@@ -847,7 +1066,7 @@ public sealed class ScriptRunner : IDisposable
         return string.Join(Environment.NewLine, sb);
     }
 
-    private static string Sanitize(string name)
+    internal static string Sanitize(string name)
     {
         var invalid = Path.GetInvalidFileNameChars();
         var cleaned = new string(name.Select(ch => invalid.Contains(ch) ? '_' : ch).ToArray());

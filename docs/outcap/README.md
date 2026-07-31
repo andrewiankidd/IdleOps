@@ -1,5 +1,7 @@
 # outcap — Combined Audio/Video Capture
 
+> **Platform:** 🟢 Windows · 🟢 Linux · 🟢 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+
 Capture audio and video simultaneously, then merge into a single synchronized MP4.
 
 ## Usage

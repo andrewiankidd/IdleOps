@@ -8,7 +8,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  # Windows builds and tests the FULL solution (all tools, including the
+  # Windows-only ones: inpctl/uiactl/txtfnd/scrcap/imgfnd/waitfr/stpcap/playbk).
+  windows:
+    name: Windows (full)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,6 +37,55 @@ jobs:
 
       - name: Smoke test — run .idleops.yaml via playbk
         run: |
-          src/playbk/bin/Release/net10.0/playbk.exe `
+          src/playbk/bin/Release/net10.0-windows10.0.22621.0/playbk.exe `
             -i src/playbk/inputs/smoke-test.idleops.yaml `
             -o ./smoke-outputs
+
+  # Linux/macOS build, test and publish ONLY the cross-platform tools. Most tools
+  # are Windows-only (Win32/COM/WinRT) — those are either stubbed at runtime or use
+  # a Windows-only TFM, so they are deliberately excluded here. See the support
+  # matrix in README.md.
+  crossplatform:
+    name: Cross-platform (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # spkbak is multi-targeted; off Windows only its net10.0 TFM can build.
+      - name: Build cross-platform tools
+        run: |
+          for p in cnvrtr audcap vidcap outcap; do
+            dotnet build "src/$p/$p.csproj" -c Release
+          done
+          dotnet build src/spkbak/spkbak.csproj -c Release -f net10.0
+
+      - name: Test (cross-platform, excluding hardware-dependent)
+        run: |
+          dotnet test src/cnvrtr.Tests/cnvrtr.Tests.csproj -c Release
+          dotnet test src/spkbak.Tests/spkbak.Tests.csproj -c Release
+
+      - name: Publish downloadable binaries
+        run: |
+          for p in cnvrtr audcap vidcap outcap; do
+            dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} --self-contained false -o "publish/$p"
+          done
+          dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -o publish/spkbak
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: idleops-${{ matrix.rid }}
+          path: publish/

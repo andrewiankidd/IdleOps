@@ -1,12 +1,18 @@
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
 using System.Runtime.Versioning;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
-using Windows.Storage.Streams;
 
-namespace txtfnd.Ocr;
+namespace IdleOps.Shared.Win;
 
+/// <summary>
+/// OCR search over a bitmap. The <see cref="OcrEngine"/> is passed in (not created
+/// here) so callers can reuse a warm engine across many searches — creating one per
+/// call is the per-step cost that made shelling out to txtfnd expensive.
+/// </summary>
 [SupportedOSPlatform("windows10.0.22621.0")]
 internal static class OcrService
 {
@@ -14,24 +20,15 @@ internal static class OcrService
     /// Find the center coordinates of a text match within a bitmap.
     /// Returns (x, y) relative to the bitmap origin, or null if not found.
     /// </summary>
-    public static async Task<(int x, int y)?> FindTextAsync(Bitmap bitmap, string searchText)
+    public static async Task<(int x, int y)?> FindTextAsync(OcrEngine engine, Bitmap bitmap, string searchText)
     {
-        var engine = OcrEngine.TryCreateFromUserProfileLanguages();
-        if (engine is null)
-        {
-            throw new InvalidOperationException("No OCR language available. Install a language pack in Windows Settings.");
-        }
-
-        using var softwareBitmap = await ConvertToSoftwareBitmapAsync(bitmap);
+        using var softwareBitmap = ToSoftwareBitmap(bitmap);
         var result = await engine.RecognizeAsync(softwareBitmap);
 
-        // Try exact single-word match first, then substring across consecutive words
         foreach (var line in result.Lines)
         {
-            // Check if the entire line text contains the search string
             if (line.Text.Contains(searchText, StringComparison.OrdinalIgnoreCase))
             {
-                // Find which word(s) contain/span the match
                 var match = FindWordSpan(line.Words, searchText);
                 if (match is not null)
                 {
@@ -43,18 +40,10 @@ internal static class OcrService
         return null;
     }
 
-    /// <summary>
-    /// Get all recognized text from a bitmap (for debugging).
-    /// </summary>
-    public static async Task<IReadOnlyList<OcrTextResult>> RecognizeAllAsync(Bitmap bitmap)
+    /// <summary>Get all recognized text from a bitmap (for debugging).</summary>
+    public static async Task<IReadOnlyList<OcrTextResult>> RecognizeAllAsync(OcrEngine engine, Bitmap bitmap)
     {
-        var engine = OcrEngine.TryCreateFromUserProfileLanguages();
-        if (engine is null)
-        {
-            return [];
-        }
-
-        using var softwareBitmap = await ConvertToSoftwareBitmapAsync(bitmap);
+        using var softwareBitmap = ToSoftwareBitmap(bitmap);
         var result = await engine.RecognizeAsync(softwareBitmap);
 
         var results = new List<OcrTextResult>();
@@ -75,7 +64,6 @@ internal static class OcrService
 
     private static (int x, int y)? FindWordSpan(IReadOnlyList<OcrWord> words, string searchText)
     {
-        // Single word match
         foreach (var word in words)
         {
             if (word.Text.Contains(searchText, StringComparison.OrdinalIgnoreCase))
@@ -85,7 +73,6 @@ internal static class OcrService
             }
         }
 
-        // Multi-word span match (e.g., "Save As" spanning two OcrWords)
         for (var i = 0; i < words.Count; i++)
         {
             var combined = words[i].Text;
@@ -102,7 +89,6 @@ internal static class OcrService
 
                 if (combined.Contains(searchText, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Return center of the bounding box spanning all matched words
                     var left = Math.Min(firstRect.X, lastRect.X);
                     var top = Math.Min(firstRect.Y, lastRect.Y);
                     var right = Math.Max(firstRect.X + firstRect.Width, lastRect.X + lastRect.Width);
@@ -115,19 +101,28 @@ internal static class OcrService
         return null;
     }
 
-    private static async Task<SoftwareBitmap> ConvertToSoftwareBitmapAsync(Bitmap bitmap)
+    // Copy the bitmap's pixels straight into a SoftwareBitmap. This bypasses the
+    // WIC PNG encode/decode round-trip (which failed with WINCODEC_ERR_COMPONENTNOTFOUND
+    // and cost a full encode+decode per frame). System.Drawing's 32bppArgb is BGRA
+    // in memory, matching BitmapPixelFormat.Bgra8.
+    private static SoftwareBitmap ToSoftwareBitmap(Bitmap bitmap)
     {
-        using var ms = new MemoryStream();
-        bitmap.Save(ms, ImageFormat.Png);
-        ms.Position = 0;
-
-        var stream = new InMemoryRandomAccessStream();
-        await ms.CopyToAsync(stream.AsStreamForWrite());
-        stream.Seek(0);
-
-        var decoder = await BitmapDecoder.CreateAsync(stream);
-        return await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+        var rect = new Rectangle(0, 0, bitmap.Width, bitmap.Height);
+        var data = bitmap.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            var length = data.Stride * bitmap.Height;
+            var buffer = new byte[length];
+            Marshal.Copy(data.Scan0, buffer, 0, length);
+            var software = new SoftwareBitmap(BitmapPixelFormat.Bgra8, bitmap.Width, bitmap.Height, BitmapAlphaMode.Premultiplied);
+            software.CopyFromBuffer(buffer.AsBuffer());
+            return software;
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
     }
 }
 
-internal sealed record OcrTextResult(string Text, int X, int Y, int Width, int Height);
+public sealed record OcrTextResult(string Text, int X, int Y, int Width, int Height);

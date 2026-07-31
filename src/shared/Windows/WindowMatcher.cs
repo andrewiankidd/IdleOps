@@ -62,6 +62,7 @@ public static class WindowMatcher
     /// </summary>
     public static IReadOnlyList<WindowInfo> FindAllWindows(string titlePattern)
     {
+        Platform.PlatformSupport.RequireWindows("Window enumeration");
         var regex = BuildWildcardRegex(titlePattern);
         var results = new List<WindowInfo>();
 

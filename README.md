@@ -4,29 +4,32 @@ IdleOps is a modular toolkit for automating desktop interactions, capturing medi
 
 ## Components
 
+Platform support: 🟢 works · 🟡 stubbed (builds, but exits with a clear "not implemented on this platform" message — no native equivalent yet) · 🔴 not available (Windows-only build).
+
 ### Capture
-| Tool | Description |
-|------|-------------|
-| **[audcap](docs/audcap/README.md)** | Cross-platform system audio capture (WAV) |
-| **[vidcap](docs/vidcap/README.md)** | Cross-platform screen/window video capture (MP4) |
-| **[outcap](docs/outcap/README.md)** | Synchronized audio + video capture and merge |
-| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) |
+| Tool | Description | Win | Lin | Mac |
+|------|-------------|:---:|:---:|:---:|
+| **[audcap](docs/audcap/README.md)** | Cross-platform system audio capture (WAV) | 🟢 | 🟢 | 🟢 |
+| **[vidcap](docs/vidcap/README.md)** | Cross-platform screen/window video capture (MP4) | 🟢 | 🟢 | 🟢 |
+| **[outcap](docs/outcap/README.md)** | Synchronized audio + video capture and merge | 🟢 | 🟢 | 🟢 |
+| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) | 🟢 | 🟡 | 🟡 |
 
 ### Automation
-| Tool | Description |
-|------|-------------|
-| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, screenshot) |
-| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management (Windows) |
-| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates (Windows) |
-| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image (Windows) |
-| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions (Windows) |
-| **[stpcap](docs/stpcap/README.md)** | Record user input into YAML scripts (Windows) |
+| Tool | Description | Win | Lin | Mac |
+|------|-------------|:---:|:---:|:---:|
+| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, assert-text, type, screenshot, speak, UIA verbs) | 🟢 | 🔴 | 🔴 |
+| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management | 🟢 | 🟡 | 🟡 |
+| **[uiactl](docs/uiactl/README.md)** | Element automation via UI Automation — set-value/invoke/toggle/etc. by accessibility tree, focus-free | 🟢 | 🟡 | 🟡 |
+| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates | 🟢 | 🔴 | 🔴 |
+| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image | 🟢 | 🟡 | 🟡 |
+| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions | 🟢 | 🔴 | 🔴 |
+| **[stpcap](docs/stpcap/README.md)** | Record user input into YAML scripts — emits resilient semantic steps (UIA → OCR → coords) | 🟢 | 🟡 | 🟡 |
 
 ### Utilities
-| Tool | Description |
-|------|-------------|
-| **[spkbak](docs/spkbak/README.md)** | Text-to-speech (Windows) |
-| **[cnvrtr](docs/cnvrtr/README.md)** | Universal converter — encodings, units, dates, files (200+ formats) |
+| Tool | Description | Win | Lin | Mac |
+|------|-------------|:---:|:---:|:---:|
+| **[spkbak](docs/spkbak/README.md)** | Text-to-speech — WinRT on Windows, `say`/`espeak` on macOS/Linux | 🟢 | 🟢 | 🟢 |
+| **[cnvrtr](docs/cnvrtr/README.md)** | Universal converter — encodings, units, dates, files (200+ formats) | 🟢 | 🟢 | 🟢 |
 
 ## Quick Start
 
@@ -55,7 +58,11 @@ dotnet run --project src/txtfnd -- --window "Notepad*" --text "File"
 ### Automated screenshot generation for documentation
 Define a `.idleops.yaml` script that launches your app, navigates the UI via OCR, captures screenshots, and saves them to your repo's docs folder. Re-run the script whenever the UI changes to refresh all screenshots in one go.
 
-> **Real-world example**: IdleOps was used to generate **15 screenshots** for the [Crosspose](https://github.com/andrewiankidd/Crosspose) repo — full sidebar navigation, container details tabs, dark/light mode variants, and per-GUI screens. See `src/playbk/inputs/crosspose-gui-screenshots.idleops.yaml` for the full script.
+> **Real-world examples**:
+> - **[Crosspose](https://github.com/andrewiankidd/Crosspose)** — **15 screenshots**: full sidebar navigation, container details tabs, dark/light mode variants, and per-GUI screens. Scripts live in the Crosspose repo at [`assets/idleops/`](https://github.com/andrewiankidd/Crosspose/tree/main/assets/idleops) (`crosspose-gui-screenshots.idleops.yaml` et al).
+> - **POSEIDEN** — GUI screenshots for a Rust/Tauri desktop app's docs, driven against an anonymized demo instance (`poseiden-gui-screenshots.idleops.yaml`).
+>
+> Both keep their `.idleops.yaml` scripts in their own repos and link back to this project's [schema](schema/idleops.schema.json) via a `# yaml-language-server: $schema=…` modeline.
 
 ### Automated video documentation / demo recording
 Open an app, perform a workflow (type, click, navigate menus), record both screen and audio, save synchronized MP4. Optionally narrate via text-to-speech (`spkbak`).

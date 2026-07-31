@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using IdleOps.Shared.Windows;
+using IdleOps.Shared.Windows.Uia;
 
 namespace stpcap.Recording;
 
@@ -16,6 +17,11 @@ internal sealed class InputRecorder : IDisposable
     private readonly LowLevelKeyboardProc _keyboardCallback;
     private readonly LowLevelMouseProc _mouseCallback;
 
+    // UI Automation, used to capture the element under the cursor at click time
+    // so we can emit resilient semantic steps. Best-effort: null if UIA is
+    // unavailable, and every query is wrapped so recording never breaks.
+    private readonly UiaAutomation? _uia;
+
     // Track typed characters for coalescing into --type strings
     private readonly StringBuilder _typingBuffer = new();
     private string? _typingWindow;
@@ -26,6 +32,7 @@ internal sealed class InputRecorder : IDisposable
     private int _mouseDownX, _mouseDownY;
     private DateTime _mouseDownTime;
     private string? _mouseDownWindow;
+    private ElementInfo? _mouseDownElement;
 
     public InputRecorder(string? windowFilter)
     {
@@ -33,6 +40,14 @@ internal sealed class InputRecorder : IDisposable
         _windowRegex = windowFilter is not null ? WindowMatcher.BuildWildcardRegex(windowFilter) : null;
         _keyboardCallback = KeyboardHookCallback;
         _mouseCallback = MouseHookCallback;
+        try { _uia = new UiaAutomation(); } catch { _uia = null; }
+    }
+
+    // Query the element under a screen point at click time (before the app reacts).
+    private ElementInfo? ElementAt(int x, int y)
+    {
+        try { return _uia?.ElementAt(x, y); }
+        catch { return null; }
     }
 
     public IReadOnlyList<InputEvent> Events => _events;
@@ -147,6 +162,8 @@ internal sealed class InputRecorder : IDisposable
                     _mouseDownY = hookStruct.pt.y;
                     _mouseDownTime = DateTime.UtcNow;
                     _mouseDownWindow = title;
+                    // Capture the element now, before the click is processed and the UI changes.
+                    _mouseDownElement = ElementAt(hookStruct.pt.x, hookStruct.pt.y);
                 }
                 else if (msg == WM_LBUTTONUP && _mouseDown)
                 {
@@ -162,8 +179,9 @@ internal sealed class InputRecorder : IDisposable
                     else
                     {
                         _events.Add(new InputEvent(InputEventType.MouseClick, _mouseDownTime, _mouseDownWindow,
-                            X: _mouseDownX, Y: _mouseDownY, Button: "left"));
+                            X: _mouseDownX, Y: _mouseDownY, Button: "left", Element: _mouseDownElement));
                     }
+                    _mouseDownElement = null;
                 }
                 else if (msg == WM_RBUTTONDOWN)
                 {
