@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
@@ -22,8 +23,7 @@ internal static class OcrService
     /// </summary>
     public static async Task<(int x, int y)?> FindTextAsync(OcrEngine engine, Bitmap bitmap, string searchText)
     {
-        using var softwareBitmap = ToSoftwareBitmap(bitmap);
-        var result = await engine.RecognizeAsync(softwareBitmap);
+        var (result, scale) = await RecognizeScaledAsync(engine, bitmap);
 
         foreach (var line in result.Lines)
         {
@@ -32,7 +32,8 @@ internal static class OcrService
                 var match = FindWordSpan(line.Words, searchText);
                 if (match is not null)
                 {
-                    return match;
+                    // Coords are in upscaled space; map back to the original bitmap.
+                    return ((int)Math.Round(match.Value.x / scale), (int)Math.Round(match.Value.y / scale));
                 }
             }
         }
@@ -43,8 +44,7 @@ internal static class OcrService
     /// <summary>Get all recognized text from a bitmap (for debugging).</summary>
     public static async Task<IReadOnlyList<OcrTextResult>> RecognizeAllAsync(OcrEngine engine, Bitmap bitmap)
     {
-        using var softwareBitmap = ToSoftwareBitmap(bitmap);
-        var result = await engine.RecognizeAsync(softwareBitmap);
+        var (result, scale) = await RecognizeScaledAsync(engine, bitmap);
 
         var results = new List<OcrTextResult>();
         foreach (var line in result.Lines)
@@ -54,12 +54,59 @@ internal static class OcrService
                 var r = word.BoundingRect;
                 results.Add(new OcrTextResult(
                     word.Text,
-                    (int)r.X, (int)r.Y,
-                    (int)r.Width, (int)r.Height));
+                    (int)Math.Round(r.X / scale), (int)Math.Round(r.Y / scale),
+                    (int)Math.Round(r.Width / scale), (int)Math.Round(r.Height / scale)));
             }
         }
 
         return results;
+    }
+
+    // Windows.Media.Ocr is tuned for document/photo-scale text and misses small,
+    // anti-aliased UI labels (menu items, sidebar links) at native 1x. Upscaling the
+    // capture with a quality resample before recognition raises the effective
+    // x-height into the engine's comfortable range - a large accuracy win for the UI
+    // text automation actually clicks. The returned OCR coordinates are in upscaled
+    // space; callers get them mapped back to the original bitmap via the scale.
+    private static async Task<(OcrResult result, double scale)> RecognizeScaledAsync(OcrEngine engine, Bitmap bitmap)
+    {
+        var scale = ComputeOcrScale(bitmap);
+        Bitmap? scaled = scale > 1.0 ? UpscaleBitmap(bitmap, scale) : null;
+        try
+        {
+            using var softwareBitmap = ToSoftwareBitmap(scaled ?? bitmap);
+            var result = await engine.RecognizeAsync(softwareBitmap);
+            return (result, scale);
+        }
+        finally
+        {
+            scaled?.Dispose();
+        }
+    }
+
+    // Aim for a 2x upscale, but never exceed the engine's max supported dimension
+    // and never downscale (a capture already larger than the target keeps its size).
+    private static double ComputeOcrScale(Bitmap bitmap)
+    {
+        const double target = 2.0;
+        var longest = Math.Max(bitmap.Width, bitmap.Height);
+        if (longest <= 0) return 1.0;
+        var limit = (double)OcrEngine.MaxImageDimension / longest;
+        var scale = Math.Min(target, limit);
+        return scale < 1.0 ? 1.0 : scale;
+    }
+
+    private static Bitmap UpscaleBitmap(Bitmap src, double scale)
+    {
+        var w = Math.Max(1, (int)Math.Round(src.Width * scale));
+        var h = Math.Max(1, (int)Math.Round(src.Height * scale));
+        var dst = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+        using var g = Graphics.FromImage(dst);
+        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+        g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+        g.SmoothingMode = SmoothingMode.HighQuality;
+        g.DrawImage(src, new Rectangle(0, 0, w, h));
+        return dst;
     }
 
     private static (int x, int y)? FindWordSpan(IReadOnlyList<OcrWord> words, string searchText)
