@@ -25,7 +25,48 @@ internal sealed class LinuxUiAutomation : IUiAutomation
         ["Document"] = "document", ["Group"] = "panel", ["ToolBar"] = "tool bar",
     };
 
-    private static string HelperPath => Path.Combine(AppContext.BaseDirectory, "atspi_helper.py");
+    // The helper is embedded in the binary and written out on first use, so uiactl ships as
+    // a single executable with nothing to place beside it. AT-SPI2 is a D-Bus protocol whose
+    // .NET equivalent means reimplementing the org.a11y.atspi.* interface surface, so unlike
+    // stpcap's XRecord backend (plain C, now P/Invoke) pyatspi still earns its keep here.
+    private static readonly Lazy<string?> Helper = new(ExtractHelper);
+
+    private static string? HelperPath => Helper.Value;
+
+    private static string? ExtractHelper()
+    {
+        const string resource = "uiactl.atspi_helper.py";
+        try
+        {
+            using var stream = typeof(LinuxUiAutomation).Assembly.GetManifestResourceStream(resource);
+            if (stream is null)
+            {
+                Console.Error.WriteLine($"[uiactl] embedded {resource} is missing from this build.");
+                return null;
+            }
+
+            // Per-user, version-stamped: concurrent uiactl runs share it, and a rebuilt
+            // helper lands at a new path rather than being read stale from a previous run.
+            var stamp = typeof(LinuxUiAutomation).Assembly.GetName().Version?.ToString() ?? "0";
+            var dir = Path.Combine(Path.GetTempPath(), $"idleops-uiactl-{Environment.UserName}-{stamp}");
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "atspi_helper.py");
+
+            if (!File.Exists(path))
+            {
+                // Write-then-move so a concurrent run never sees a half-written file.
+                var tmp = Path.Combine(dir, $"atspi_helper.{Environment.ProcessId}.tmp");
+                using (var file = File.Create(tmp)) stream.CopyTo(file);
+                try { File.Move(tmp, path); } catch (IOException) { File.Delete(tmp); }  // lost the race: the winner's copy is identical
+            }
+            return path;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"[uiactl] could not unpack the AT-SPI helper: {ex.Message}");
+            return null;
+        }
+    }
 
     public ElementInfo? ElementAt(int x, int y)
     {
@@ -69,7 +110,8 @@ internal sealed class LinuxUiAutomation : IUiAutomation
 
     private (bool ok, string stdout, string stderr) Run(string verb, string window, Selector? selector, string? point = null, string? value = null, int? max = null)
     {
-        var args = new List<string> { HelperPath, verb };
+        if (HelperPath is not { } helper) return (false, "", "the embedded AT-SPI helper could not be unpacked");
+        var args = new List<string> { helper, verb };
         if (!string.IsNullOrEmpty(window)) { args.Add("--window"); args.Add(window); }
         if (selector is { } sel)
         {

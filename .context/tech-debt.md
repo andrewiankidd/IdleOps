@@ -26,6 +26,25 @@ The whole toolkit runs on Linux (X11). Status of the known items:
   flaky. Poor effort/value/risk for a niche gain when coordinates already work — revisit
   only if resilient Linux recordings become a real need.
 
+## Python helpers on Linux
+
+The Linux backends originally shelled out to two bundled Python scripts, justified as "the
+same external-tool model we use for ffmpeg/xdotool/tesseract". That analogy was weak: those
+are pre-existing tools the user installs, whereas these were *our own code* shipped in
+another language, carrying an install-time dependency and blocking single-binary packaging.
+
+- **stpcap — resolved.** XRecord is a plain C API in libXtst (no D-Bus, no GObject), and
+  this repo already hand-rolls COM vtables for UIA, so P/Invoke was well within its normal
+  interop. `LinuxInputRecorder` now calls libXtst directly and `python3-xlib` is gone.
+  Verified under Xvfb producing byte-identical playbooks to the Python version.
+- **uiactl — kept, deliberately.** AT-SPI2 is a D-Bus protocol; the native equivalent means
+  reimplementing the `org.a11y.atspi.*` surface over a D-Bus client, or P/Invoking libatspi
+  (GObject: refcounting, `GError**`, introspection types). `pyatspi` collapses that into
+  ~190 lines, which is real leverage rather than laziness. The script is now an
+  **embedded resource** unpacked to a temp path on first use, so uiactl still publishes as
+  a single executable — but `python3-pyatspi` remains a runtime dependency, and the backend
+  degrades to "element not found" without it.
+
 **Can't be closed on X11 (documented per tool, not debt to pay down):**
 
 - **inpctl `--background` is best-effort** — X `XSendEvent` is ignored by many apps for

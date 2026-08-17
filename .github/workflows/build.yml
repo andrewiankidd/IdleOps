@@ -55,35 +55,36 @@ jobs:
         run: |
           $sf = '-p:PublishSingleFile=true', '-p:DebugType=none'
           foreach ($p in @('cnvrtr','audcap','vidcap','outcap','inpctl','scrcap','imgfnd','llmctl','uiactl','stpcap')) {
-            dotnet publish "src/$p/$p.csproj" -c Release -r win-x64 @sf -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -r win-x64 @sf -o "staged/$p"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
           foreach ($p in @('spkbak','txtfnd','waitfr','playbk')) {
-            dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 @sf -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 @sf -o "staged/$p"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
-          # Co-locate every tool beside playbk. playbk prepends its own directory to PATH
-          # (Program.cs) and shells out by bare name, so this is what makes the bundle work
-          # without anything being installed on PATH.
+          # Flatten to ONE directory of purpose-named executables. Each tool is published
+          # into its own staging dir first, then only its own .exe is taken forward — the
+          # staging dirs also contain bare apphosts for ProjectReferenced tools (outcap
+          # carries audcap/vidcap, playbk carries most of them) which are dead weight now
+          # that each tool is a single file, and would shadow the real binaries.
           #
-          # Every tool, not just the ones playbk calls: its publish drops a bare apphost for
-          # each ProjectReferenced exe (audcap/vidcap/llmctl included) with no .dll beside
-          # it, since single-file bundled those into playbk.exe. Copying the whole set with
-          # -Force overwrites each stub with the real single-file executable; anything
-          # missed would ship as a stub that exits "application to execute does not exist".
-          # Only each tool's OWN executable: publish/outcap/ also contains bare apphosts for
-          # audcap and vidcap (it ProjectReferences them), so copying whole directories would
-          # reintroduce the very stubs this is meant to overwrite, order-dependently.
-          Get-ChildItem publish -Directory | Where-Object { $_.Name -ne 'playbk' } | ForEach-Object {
+          # Flat is also what makes playbk work: it prepends its own directory to PATH
+          # (Program.cs) and shells out by bare name, so one directory means no duplicated
+          # copy of every tool inside playbk's own folder.
+          New-Item -ItemType Directory -Force -Path bundle | Out-Null
+          Get-ChildItem staged -Directory | ForEach-Object {
             $exe = Join-Path $_.FullName "$($_.Name).exe"
-            if (Test-Path $exe) { Copy-Item $exe "publish/playbk/" -Force }
+            if (Test-Path $exe) { Copy-Item $exe bundle/ -Force }
+            # LLamaSharp's native libraries are the one unavoidable extra.
+            $rt = Join-Path $_.FullName 'runtimes'
+            if (Test-Path $rt) { Copy-Item $rt bundle/ -Recurse -Force }
           }
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: idleops-win-x64
-          path: publish/
+          path: bundle/
 
   # Linux/macOS build, test and publish the cross-platform tools. Input (inpctl),
   # screen capture (scrcap), image matching (imgfnd) and the AI layer (llmctl) now
@@ -159,13 +160,11 @@ jobs:
           sudo $APT install -y -qq at-spi2-core python3-pyatspi dbus-x11 gnome-calculator
           bash scripts/linux-uiactl-e2e.sh
 
-      # XRecord input-recording e2e for stpcap. Linux only; self-skips without python3-xlib.
+      # XRecord input-recording e2e for stpcap (P/Invoke to libXtst — no Python). Linux only.
       - name: Linux XRecord end-to-end (stpcap)
         if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 15
-        run: |
-          sudo $APT install -y -qq python3-xlib
-          bash scripts/linux-stpcap-e2e.sh
+        run: bash scripts/linux-stpcap-e2e.sh
 
       # Full-stack e2e: the playbk orchestrator running a real playbook on Linux.
       - name: Linux end-to-end (playbk orchestrator)
@@ -180,35 +179,34 @@ jobs:
           set -euo pipefail
           SF="-p:PublishSingleFile=true -p:DebugType=none"
           for p in cnvrtr audcap vidcap outcap inpctl scrcap imgfnd llmctl uiactl stpcap; do
-            dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} $SF -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} $SF -o "staged/$p"
           done
-          dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -o publish/spkbak
-          dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/txtfnd
-          dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/waitfr
-          dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/playbk
-          # Co-locate every tool beside playbk. playbk prepends its own directory to PATH
-          # (Program.cs) and shells out by bare name, so this is what makes the bundle work
-          # without anything being installed on PATH.
+          dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -o staged/spkbak
+          dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o staged/txtfnd
+          dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o staged/waitfr
+          dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o staged/playbk
+          # Flatten to ONE directory of purpose-named executables. Each tool is published
+          # into its own staging dir first, then only its own binary is taken forward — the
+          # staging dirs also contain bare apphosts for ProjectReferenced tools (outcap
+          # carries audcap/vidcap, playbk carries most of them) which are dead weight now
+          # that each tool is a single file, and would shadow the real binaries.
           #
-          # Every tool, not just the ones playbk calls: its publish drops a bare apphost for
-          # each ProjectReferenced exe (audcap/vidcap/llmctl included) with no .dll beside
-          # it, since single-file bundled those into the playbk binary. Copying the whole
-          # set with -f overwrites each stub with the real single-file executable; anything
-          # missed would ship as a stub that exits "application to execute does not exist".
-          # Only each tool's OWN binary: publish/outcap/ also contains bare apphosts for
-          # audcap and vidcap (it ProjectReferences them), so copying whole directories would
-          # reintroduce the very stubs this is meant to overwrite, order-dependently.
-          for d in publish/*/; do
+          # Flat is also what makes playbk work: it prepends its own directory to PATH
+          # (Program.cs) and shells out by bare name, so one directory means no duplicated
+          # copy of every tool inside playbk's own folder.
+          mkdir -p bundle
+          for d in staged/*/; do
             t="$(basename "$d")"
-            [ "$t" = playbk ] && continue
-            [ -f "$d$t" ] && cp -f "$d$t" publish/playbk/
+            [ -f "$d$t" ] && cp -f "$d$t" bundle/
+            # LLamaSharp's native libraries are the one unavoidable extra.
+            [ -d "${d}runtimes" ] && cp -rf "${d}runtimes" bundle/ || true
           done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
           name: idleops-${{ matrix.rid }}
-          path: publish/
+          path: bundle/
 
   # Rolling `latest-main` release: every green push to main republishes the per-platform
   # bundles, so there is always a current download without cutting a version. Gated on

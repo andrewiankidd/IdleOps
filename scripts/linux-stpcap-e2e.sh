@@ -2,7 +2,7 @@
 #
 # Linux XRecord end-to-end for stpcap: record synthesized input under a headless
 # Xvfb and assert the generated playbook captured the click, typed text and Enter.
-# Self-SKIPS if python3-xlib isn't present. Uses SIGTERM to stop stpcap (a bash
+# Uses SIGTERM to stop stpcap (a bash
 # background job has SIGINT set to SIG_IGN, so `kill -INT` wouldn't reach it — a
 # real interactive Ctrl+C does).
 set -uo pipefail
@@ -12,7 +12,6 @@ cd "$repo_root"
 
 STPCAP="$(find src/stpcap/bin -name stpcap.dll -path '*/net10.0/*' 2>/dev/null | head -1)"
 if [ -z "$STPCAP" ]; then echo "SKIP: stpcap not built"; exit 0; fi
-if ! python3 -c "import Xlib" >/dev/null 2>&1; then echo "SKIP: python3-xlib not installed"; exit 0; fi
 
 export DISPLAY=:99
 work="$(mktemp -d)"; out="$work/rec.yaml"
@@ -20,7 +19,7 @@ work="$(mktemp -d)"; out="$work/rec.yaml"
 # command lines, and this script's own is `bash scripts/linux-stpcap-e2e.sh` — which
 # contains "stpcap". The broader pattern makes the EXIT trap SIGTERM the script itself,
 # so a fully passing run still exits 143 right after printing ALL PASS.
-cleanup() { pkill -f stpcap.dll 2>/dev/null || true; pkill -f stprec_helper 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
+cleanup() { pkill -f stpcap.dll 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >"$work/xvfb.log" 2>&1 & sleep 2

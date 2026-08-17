@@ -15,9 +15,13 @@
     <ProjectReference Include="..\shared\shared.csproj" />
   </ItemGroup>
 
-  <!-- The Linux AT-SPI backend shells out to this pyatspi helper; ship it beside the binary. -->
+  <!--
+    The Linux AT-SPI backend shells out to this pyatspi helper. Embedded rather than copied
+    beside the binary so uiactl publishes as a single executable; LinuxUiAutomation unpacks
+    it to a temp path on first use. LogicalName pins the resource id the code looks up.
+  -->
   <ItemGroup>
-    <None Include="atspi_helper.py" CopyToOutputDirectory="PreserveNewest" />
+    <EmbeddedResource Include="atspi_helper.py" LogicalName="uiactl.atspi_helper.py" />
   </ItemGroup>
 
 </Project>
