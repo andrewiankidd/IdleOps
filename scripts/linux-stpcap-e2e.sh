@@ -16,7 +16,11 @@ if ! python3 -c "import Xlib" >/dev/null 2>&1; then echo "SKIP: python3-xlib not
 
 export DISPLAY=:99
 work="$(mktemp -d)"; out="$work/rec.yaml"
-cleanup() { pkill -f stpcap 2>/dev/null || true; pkill -f stprec_helper 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
+# The stpcap pattern must be `stpcap.dll`, not `stpcap`: `pkill -f` matches whole
+# command lines, and this script's own is `bash scripts/linux-stpcap-e2e.sh` — which
+# contains "stpcap". The broader pattern makes the EXIT trap SIGTERM the script itself,
+# so a fully passing run still exits 143 right after printing ALL PASS.
+cleanup() { pkill -f stpcap.dll 2>/dev/null || true; pkill -f stprec_helper 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >"$work/xvfb.log" 2>&1 & sleep 2
