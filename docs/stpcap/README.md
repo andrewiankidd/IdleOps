@@ -3,7 +3,7 @@
 > **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
 >
 > **Linux (X11):** records via the XRecord extension (needs `python3-xlib`). Clicks are recorded as **window-relative coordinates**, not semantic UIA steps — the Windows recorder uses UIA element-at to emit resilient `invoke`/`click-text` steps; AT-SPI element enrichment on Linux isn't wired up yet. X11 only (no Wayland). Stop with Ctrl+C.
-> **macOS:** no recorder backend yet — exits with a clear message.
+> **macOS:** no recorder backend — exits with a clear message. Recording would need a CGEventTap (the hooks/XRecord equivalent), which has no CLI shim the way `cliclick` covers injection; still the one genuinely unimplemented macOS backend.
 
 Record keyboard and mouse input into an IdleOps YAML script. The inverse of playbk — perform actions once, then replay them.
 

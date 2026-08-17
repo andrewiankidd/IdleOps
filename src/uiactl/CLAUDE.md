@@ -66,11 +66,35 @@ The engine logic still lives in `IdleOps.Shared.Windows.Uia` for the Windows pat
 - Verbs → AT-SPI: invoke/toggle/select/expand/collapse → the Action interface (`doAction`); get/set-value → Value / EditableText / Text interfaces; dump → tree walk; element-at → `getAccessibleAtPoint`.
 - Verified end-to-end against gnome-calculator under Xvfb (`scripts/linux-uiactl-e2e.sh`, wired into CI).
 
+## macOS (osascript / System Events) backend
+
+AppleScript UI scripting, the closest built-in analog to UIA. Four non-obvious rules — each
+one cost a silently-wrong result, so keep them if you touch `MacUiAutomation`:
+
+1. **Materialize `entire contents` first.** `set ec to entire contents of win`, then index
+   `item i of ec`. Iterating the live specifier (`repeat with e in (entire contents of win)`)
+   yields items whose every property read fails with "can't make item 1 … into type
+   specifier" — and since each read sits in a `try`, the failure looks like an empty tree.
+2. **Read every property defensively.** `name` is frequently `missing value`, and
+   concatenating that into a string raises, dropping the row.
+3. **Guard both enumeration loops.** System Events raises `-25211` on whole processes
+   (sandboxed/virtualization apps), which aborts the entire enumeration and hides every
+   window of every app after it — not just the offending one.
+4. **`whose` needs an object specifier.** `first UI element of (entire contents of win) whose
+   name is "x"` compiles but raises at runtime, because `entire contents` is a list. Loop and
+   compare instead.
+
+Selectors match name **or** title **or** description, because macOS apps fill whichever they
+like (Safari's toolbar buttons expose only a description). `--dump` reports the same
+resolved label, so what it prints is what `--name` can select. `--element-at` is unsupported
+(no hit-test in System Events) and `--invoke` cannot confirm its effect — AppleScript `click`
+succeeds even when the control ignores it.
+
 ## Dependencies
 
 - NuGet: none (raw COM interop on Windows)
 - Project: shared
-- Platform: **Windows** 🟢 UIA · **Linux** 🟢 AT-SPI2 (needs python3-pyatspi + a11y bus) · **macOS** 🟡 (AXUIElement not wired up)
+- Platform: **Windows** 🟢 UIA · **Linux** 🟢 AT-SPI2 (needs python3-pyatspi + a11y bus) · **macOS** 🟡 osascript/System Events (dump/get-value/set-value verified; no `--element-at`, and `--invoke` cannot confirm its effect)
 
 ## Build & Test
 

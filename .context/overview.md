@@ -13,7 +13,7 @@
 - **Core automation**: audcap, vidcap, outcap, playbk, inpctl — the original capture and input tools
 - **OCR & vision**: txtfnd (OCR text finder), imgfnd (image template matching), scrcap (screenshot capture)
 - **Utilities**: waitfr (wait for conditions), stpcap (input recorder), spkbak (text-to-speech), cnvrtr (universal converter)
-- **Cross-platform**: audcap and vidcap have macOS/Linux implementations via ffmpeg. Windows-only tools: inpctl, txtfnd, scrcap, imgfnd, waitfr, stpcap, spkbak
+- **Cross-platform**: every tool but `stpcap` runs on Windows, Linux (X11) and macOS via per-tool platform backends. `stpcap` records on Windows (hooks) and Linux (XRecord) only. Linux is covered by Xvfb e2e scripts in CI; macOS is verified manually on real hardware (CI runners cannot grant the TCC permissions it needs)
 
 ## Tech Stack
 

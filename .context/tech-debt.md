@@ -32,14 +32,70 @@ The whole toolkit runs on Linux (X11). Status of the known items:
   security; there is no true no-focus-steal equivalent to Windows PostMessage.
 - **Wayland is unsupported** — xdotool/XTEST need X11; Wayland has no global window
   addressing. Would require a Wayland-native approach (compositor protocols).
-- **macOS backends** are stubs (input, per-window capture, AT-SPI/AX) — the next frontier,
-  needs a Mac to build against.
+
+## Cross-platform (macOS) — verified, with remaining gaps
+
+The macOS backends were written blind and have now been run on real hardware (macOS 26,
+Apple silicon, Retina). Everything except `stpcap` works end-to-end; the bugs found while
+verifying are fixed and covered below. Remaining debt:
+
+- **stpcap has no macOS recorder** — `InputRecorderFactory` returns null and the CLI exits
+  with a clear message. Recording needs a CGEventTap; unlike injection (where `cliclick`
+  serves as a CLI shim) there is no off-the-shelf CLI, so this means either a native helper
+  or P/Invoke into ApplicationServices. The one genuinely unimplemented backend.
+- **uiactl `--element-at` is unsupported on macOS** — System Events exposes no hit-test by
+  screen point. Would need AXUIElementCopyElementAtPosition via P/Invoke, i.e. the same
+  native-helper decision as stpcap. `--dump` + name/role selection covers most uses.
+- **uiactl `--invoke` cannot confirm its effect** — AppleScript `click` returns success even
+  when the target ignores it (verified: raw `click` on a TextEdit menu button reports success
+  and opens nothing), so unlike Windows' InvokePattern a successful exit is weaker evidence.
+  Assert the resulting state rather than trusting the verb.
+- **avfoundation device warm-up is charged to `--timer`** — opening an avfoundation input
+  takes ~1.5–2.5s, and `AudcapService`/`VidcapService` start the countdown with
+  `cts.CancelAfter` before ffmpeg has opened the device, so `--timer 8` yields ~5.5s of
+  audio. *Deliberately not fixed here*: the countdown lives above the capturer abstraction
+  and is shared with outcap's A/V sync, so moving it to "start when ffmpeg reports the input
+  is open" is a cross-platform timing change that cannot be validated on Windows from a Mac.
+  Documented in the audcap/vidcap READMEs as "ask for a little more than you need".
+
+**Fixed while verifying** (each was a silent-wrong-answer bug, not a crash):
+
+- macOS Retina captures are native pixels while input is points, so every OCR/template
+  coordinate was 2× too large — `CaptureOutcome.Scale` now carries the factor and
+  `ImageTextFinder`/`imgfnd` convert before emitting.
+- One inaccessible process (a sandboxed/virtualization app) raised `-25211` and aborted the
+  *entire* System Events window enumeration, hiding every window belonging to an app that
+  happened to sort after it. Both enumeration loops are now guarded.
+- `uiactl` reported `ok` for actions on windows and elements that did not exist; element
+  lookup used a `whose` filter over `entire contents` (a list — raises at runtime), iterated
+  a live specifier instead of a materialized list, and dropped every row whose `name` was
+  `missing value`.
+- `inpctl --hold` emitted `kd:<letter>`, which `cliclick` rejects — only modifiers can be
+  held, and that is now what the code claims.
+- `spkbak --output` passed `--file-format=WAVE`, which `say` rejects outright; it needs a
+  `--data-format`.
+- avfoundation device indices were hardcoded (`1` for screen, `:0` for audio) despite being
+  machine-specific; both are resolved by device name now.
+- `spkbak.Tests` could not restore off Windows (NETSDK1100), and `WindowingTests` still
+  asserted macOS had no window locator — together these were failing the macOS/Linux CI job.
 
 ## CI
 
 `.github/workflows/build.yml` builds+tests the full solution on Windows and the
 cross-platform tools on ubuntu + macOS, with Linux e2e scripts (`scripts/linux-*.sh`)
 running the tools under Xvfb. No GitLab pipeline yet.
+
+**No macOS e2e, and there can't easily be one.** Every macOS backend needs a TCC grant
+(Accessibility / Screen Recording / Microphone) against the *app* running the tools, which
+a hosted runner cannot give — an unattended `screencapture` just fails, and `cliclick`
+succeeds while doing nothing. So the macOS job is build + unit tests only, and the
+end-to-end behaviour is verified by hand on real hardware. The unit suites are the guard
+that matters here: keep the pure logic (key translation, device-listing parse, OCR
+coordinate maths) tested, because it is the only macOS-relevant thing CI can check.
+
+Note the macOS/Linux CI job was red from the cross-platform commit until the `spkbak.Tests`
+restore and `WindowingTests` fixes above — worth checking that job actually passes before
+trusting a green-looking run.
 
 ## playbk `wait-window` silently ignores `text:` field
 

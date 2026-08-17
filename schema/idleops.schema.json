@@ -46,6 +46,7 @@
             "click-text",
             "assert-text",
             "type",
+            "keyboard",
             "screenshot",
             "speak",
             "set-value",
@@ -64,7 +65,8 @@
             "Find `text` in `window` via OCR (txtfnd) and click it (inpctl).",
             "Find `text` in `window` via OCR (txtfnd). Fails the step (halting the run) if absent. Read-only sibling of click-text.",
             "Type `text` into the focused control of `window` (inpctl). Pair with a click-text first if focus is needed.",
-            "Capture `window` to the `output` image file (scrcap). Windows only.",
+            "Send a key chord/sequence in `text` to `window` (inpctl), e.g. \"CTRL+S\" or \"CTRL+A, DELETE\". Aliases: keys, chord.",
+            "Capture `window` to the `output` image file (scrcap). Windows, Linux/X11 and macOS.",
             "Speak `text` via text-to-speech (spkbak); optionally save to `output`, pick a `voice`.",
             "UIA: set the selected element's value to `text` (uiactl). Focus-free; works on WinUI/WPF/UWP/Win32.",
             "UIA: read the selected element's value and fail unless it equals `text` (uiactl).",
@@ -178,6 +180,13 @@
         {
           "if": { "properties": { "action": { "const": "type" } }, "required": ["action"] },
           "then": { "required": ["window", "text"] }
+        },
+        {
+          "if": { "properties": { "action": { "const": "keyboard" } }, "required": ["action"] },
+          "then": {
+            "required": ["window"],
+            "anyOf": [{ "required": ["text"] }, { "required": ["args"] }]
+          }
         },
         {
           "if": { "properties": { "action": { "const": "screenshot" } }, "required": ["action"] },

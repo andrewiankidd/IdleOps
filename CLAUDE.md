@@ -54,10 +54,10 @@ Eight CLI tools built around a shared library. Each tool is a standalone executa
 | vidcap | CLI executable | Cross-platform screen/window video capture via ffmpeg | [src/vidcap/CLAUDE.md](src/vidcap/CLAUDE.md) |
 | outcap | CLI executable | Orchestrates audcap + vidcap in parallel, merges with ffmpeg | [src/outcap/CLAUDE.md](src/outcap/CLAUDE.md) |
 | playbk | CLI executable (net10.0-windows;net10.0) | YAML script engine — runs steps, manages processes, records output. Multi-targeted: Windows links WinRT OCR in-process; Linux uses the shared Tesseract/xdotool/capture backends | [src/playbk/CLAUDE.md](src/playbk/CLAUDE.md) |
-| inpctl | CLI executable | Windows-only keyboard/mouse input via P/Invoke (SendInput, PostMessage for background) | [src/inpctl/CLAUDE.md](src/inpctl/CLAUDE.md) |
-| uiactl | CLI executable | Windows-only element automation via UI Automation (thin CLI over `shared`) | [src/uiactl/CLAUDE.md](src/uiactl/CLAUDE.md) |
-| txtfnd | CLI executable | Windows-only OCR text finder — thin CLI over `shared.win` | [src/txtfnd/CLAUDE.md](src/txtfnd/CLAUDE.md) |
-| scrcap | CLI executable | Windows-only screenshot capture — saves a window to PNG/JPEG/BMP | [src/scrcap/CLAUDE.md](src/scrcap/CLAUDE.md) |
+| inpctl | CLI executable | Cross-platform keyboard/mouse input — Windows P/Invoke (SendInput/PostMessage), Linux xdotool, macOS cliclick + osascript | [src/inpctl/CLAUDE.md](src/inpctl/CLAUDE.md) |
+| uiactl | CLI executable | Element automation by accessibility tree — Windows UIA (thin CLI over `shared`), Linux AT-SPI2, macOS osascript/System Events | [src/uiactl/CLAUDE.md](src/uiactl/CLAUDE.md) |
+| txtfnd | CLI executable | OCR text finder — WinRT OCR via `shared.win` on Windows, Tesseract on Linux/macOS | [src/txtfnd/CLAUDE.md](src/txtfnd/CLAUDE.md) |
+| scrcap | CLI executable | Screenshot capture — saves a window to PNG/JPEG/BMP (GDI / ImageMagick / `screencapture`) | [src/scrcap/CLAUDE.md](src/scrcap/CLAUDE.md) |
 | stpcap | CLI executable | Input recorder → YAML (Windows low-level hooks / Linux XRecord via python-xlib); emits semantic steps (UIA → OCR → coords on Windows, coords/type on Linux) | — |
 
 ### Dependency Graph

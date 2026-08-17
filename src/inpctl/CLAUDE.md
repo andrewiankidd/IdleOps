@@ -44,7 +44,7 @@ Cross-platform CLI for sending keyboard and mouse input to target windows. Suppo
 
 - NuGet: none
 - Project: `shared` (WindowMatcher/window bounds, Windows path only)
-- Platform: Windows (user32) or Linux/X11 (xdotool). macOS not implemented.
+- Platform: Windows (user32), Linux/X11 (xdotool), or macOS (`cliclick` + `osascript`/System Events; needs Accessibility permission). `--hold` on macOS accepts modifier keys only — see the macOS section in [docs/inpctl](../../docs/inpctl/README.md).
 
 ## Build & Test
 

@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Runtime.Versioning;
 using IdleOps.Shared.Capture;
+using IdleOps.Shared.Logging;
+using IdleOps.Shared.Platform;
 
 namespace IdleOps.Shared.Windowing;
 
@@ -39,6 +41,12 @@ internal sealed class MacWindowLocator : IWindowLocator
 
     // Find the first window whose title contains the pattern (wildcards stripped) and
     // return either its "x,y,w,h" bounds or its title.
+    //
+    // Both loops are guarded. System Events raises on windows that expose no `name`, and
+    // — observed on macOS 26 — raises -25211 ("not allowed assistive access") on whole
+    // processes such as sandboxed/virtualization apps when asked for their windows. Either
+    // one aborts the entire enumeration unguarded, so a single unrelated app running in the
+    // background makes every window lookup report "not found".
     private static string? QueryWindow(string pattern, bool wantTitle)
     {
         var needle = pattern.Trim('*').Replace("\"", "\\\"");
@@ -46,19 +54,30 @@ internal sealed class MacWindowLocator : IWindowLocator
         var script = $$"""
             tell application "System Events"
               repeat with p in (every process whose background only is false)
-                repeat with w in (every window of p)
-                  if name of w contains "{{needle}}" then
-                    set pos to position of w
-                    set sz to size of w
-                    return {{result}} as string
-                  end if
-                end repeat
+                try
+                  repeat with w in (every window of p)
+                    try
+                      if name of w contains "{{needle}}" then
+                        set pos to position of w
+                        set sz to size of w
+                        return {{result}} as string
+                      end if
+                    end try
+                  end repeat
+                end try
               end repeat
             end tell
             return ""
             """;
-        var (ok, stdout, _) = ProcessRunner.Run("osascript", "-e", script);
-        if (!ok) return null;
+        var (ok, stdout, stderr) = ProcessRunner.Run("osascript", "-e", script);
+        if (!ok)
+        {
+            // Without this, a permission denial is indistinguishable from "no such window".
+            ConsoleLogger.Error(MacPermissions.IndicatesAccessibilityDenied(stderr)
+                ? MacPermissions.AccessibilityHint
+                : $"osascript window lookup failed: {stderr.Trim()}");
+            return null;
+        }
         var s = stdout.Trim();
         return s.Length == 0 ? null : s;
     }

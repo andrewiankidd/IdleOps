@@ -90,8 +90,11 @@ internal static class Program
                 return 1;
             }
 
-            var centerX = match.X + template.Width / 2;
-            var centerY = match.Y + template.Height / 2;
+            // Matching happens in image pixels, but the printed point is fed straight to
+            // inpctl, which works in window coordinates — the two differ by the display's
+            // backing scale on macOS Retina (2x), so convert before emitting.
+            var centerX = (int)Math.Round((match.X + template.Width / 2) / outcome.Scale);
+            var centerY = (int)Math.Round((match.Y + template.Height / 2) / outcome.Scale);
 
             Console.Error.WriteLine($"[imgfnd] Match found at ({match.X},{match.Y}) confidence {match.Confidence:0.###}");
             Console.WriteLine($"{centerX},{centerY}");

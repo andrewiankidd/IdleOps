@@ -10,6 +10,15 @@
     <TargetFrameworks>net10.0;net10.0-windows10.0.22621.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!--
+      Restore walks *every* TFM regardless of which one a consumer negotiates, so
+      off Windows the Windows TFM fails pack resolution (NETSDK1100) and takes the
+      whole restore with it — including `dotnet test src/spkbak.Tests`, which only
+      wants the net10.0 build. Setting this here (rather than passing
+      -p:EnableWindowsTargeting per command) keeps the project restorable on
+      Linux/macOS without every caller having to know.
+    -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
   </PropertyGroup>
 
   <!-- SoundPlayer (WinRT playback path) is Windows-only. -->

@@ -27,7 +27,7 @@ dotnet run --project src/audcap -- -d 2 -t 5 -o recording.wav
 ## How It Works
 
 - **Windows**: Uses NAudio's WASAPI loopback capture — records whatever audio is playing through the default output device. No external tools needed.
-- **macOS**: Spawns ffmpeg with avfoundation input. Requires a loopback audio driver (BlackHole or Loopback).
+- **macOS**: Spawns ffmpeg with avfoundation input, selecting the loopback device **by name** (BlackHole/Loopback/Soundflower/Aggregate) — avfoundation indices are machine-specific, and index 0 is the built-in microphone on a stock Mac. With no loopback driver installed it falls back to the first input and warns that it is recording a microphone, not system audio. Set `IDLEOPS_AVFOUNDATION_AUDIO=<index>` to choose explicitly. Needs **Microphone** permission; without it ffmpeg blocks on the consent prompt. Note the avfoundation device takes ~1.5–2.5s to open and that time counts against `--timer`, so ask for a little more than you need.
 - **Linux**: Spawns ffmpeg with PulseAudio input (`-f pulse -i default`).
 
 ## Tips

@@ -1,9 +1,9 @@
 # inpctl — Input Control (Windows Only)
 
-> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟢 macOS  —  🟢 works · 🟡 partial · 🔴 not available
 >
 > **Linux (X11):** needs `xdotool` on PATH (`wmctrl` optional, for maximize/restore). Input uses XTEST (foreground, reliable). `--background`/`--method background` is **best-effort** — it uses X `XSendEvent`, which many apps (xterm, browsers) ignore for security; there is no true no-focus-steal equivalent to Windows' PostMessage. **Wayland is not supported** (xdotool needs X11 or XWayland-hosted windows; Wayland has no global window addressing).
-> **macOS:** backend written (UNVERIFIED) — `cliclick` for mouse/keyboard (`brew install cliclick`), `osascript`/System Events for window focus/move/resize. Needs Accessibility permission; not yet validated on real hardware.
+> **macOS:** `cliclick` for mouse/keyboard (`brew install cliclick`), `osascript`/System Events for window focus/move/resize/minimize. Verified on macOS 26 (click, type, chords, move, resize, minimize/restore). Needs **Accessibility** permission — without it `cliclick` exits 0 having done nothing, so inpctl detects the denial and fails loudly instead. **`--hold` takes modifiers only** (ALT/OPTION, CTRL, SHIFT, WIN/CMD, FN): `cliclick`'s key-down accepts no other keys and macOS exposes no CLI for holding an ordinary key, so `--hold "W"` fails with that explanation rather than silently doing nothing. Coordinates are points, matching what `txtfnd`/`imgfnd` emit.
 
 Send keyboard and mouse input to windows by title. Supports wildcard matching, key chords, text typing, and mouse clicks/drags.
 

@@ -1,7 +1,16 @@
 namespace IdleOps.Shared.Capture;
 
-/// <summary>Result of a screen/window capture: success plus the saved image's pixel size.</summary>
-public readonly record struct CaptureOutcome(bool Ok, int Width, int Height)
+/// <summary>
+/// Result of a screen/window capture: success, the saved image's pixel size, and how
+/// many image pixels make up one unit of the window/input coordinate space.
+///
+/// <see cref="Scale"/> is 1.0 everywhere except macOS Retina displays, where
+/// `screencapture` writes native pixels while window bounds and synthetic input are
+/// expressed in points — a factor of 2 between "where OCR found the text" and "where a
+/// click has to go". Anything converting image coordinates into click coordinates must
+/// divide by it.
+/// </summary>
+public readonly record struct CaptureOutcome(bool Ok, int Width, int Height, double Scale = 1.0)
 {
     public static readonly CaptureOutcome Failed = new(false, 0, 0);
 }

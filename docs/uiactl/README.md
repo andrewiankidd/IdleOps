@@ -3,7 +3,7 @@
 > **Platform:** 🟢 Windows (UIA) · 🟢 Linux (AT-SPI2) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
 >
 > **Linux (AT-SPI2):** needs `python3-pyatspi` + `at-spi2-core` and a running accessibility bus (a session D-Bus with `GTK_MODULES=gail:atk-bridge`). **App coverage varies** — GTK/GNOME apps expose rich trees; some toolkits expose little or nothing. `--control-type` maps to AT-SPI roles (Button→"push button", Edit→"text", …); `--automation-id` is rarely available (AT-SPI seldom exposes an id) and falls back to name. X11 for window matching.
-> **macOS:** backend written (UNVERIFIED) — AppleScript UI scripting via `osascript`/System Events (invoke/set-value/get-value/dump). AppleScript element addressing is finicky and this is the least-validated backend; needs Accessibility permission and testing on real hardware.
+> **macOS:** AppleScript UI scripting via `osascript`/System Events (invoke/set-value/get-value/dump); needs **Accessibility** permission. Verified on macOS 26: `--dump`, `--get-value` and `--set-value` work, and a miss is now reported as a miss instead of a false "ok". Two caveats: **`--element-at` is unsupported** (System Events has no hit-test), and **`--invoke` cannot confirm its effect** — AppleScript `click` reports success even when the control ignores it, unlike Windows' InvokePattern. `--name` matches an element's name, title *or* description, since macOS apps fill whichever they please (Safari's toolbar buttons expose only a description); `--dump` shows the same label so what you see is what you can select.
 
 Drive desktop controls by their **accessibility tree** instead of screen
 coordinates or OCR. `uiactl` finds a control by AutomationId / Name / ControlType

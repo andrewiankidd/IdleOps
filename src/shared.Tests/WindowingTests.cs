@@ -5,21 +5,23 @@ namespace IdleOps.Shared.Tests;
 
 public class WindowingTests
 {
+    // Windows (user32), Linux (xdotool) and macOS (osascript) all have a backend now;
+    // only an unrecognized OS returns null.
     [Fact]
-    public void Factory_ReturnsLocator_OnWindowsAndLinux()
+    public void Factory_ReturnsLocator_OnEverySupportedOs()
     {
         var locator = WindowLocatorFactory.Create();
-        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux())
-            Assert.NotNull(locator);   // user32 or xdotool backend
+        if (OperatingSystem.IsWindows() || OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            Assert.NotNull(locator);
         else
-            Assert.Null(locator);      // macOS: window enumeration by title not wired up
+            Assert.Null(locator);
     }
 
     [Fact]
     public void Nonexistent_Window_DoesNotExist()
     {
         var locator = WindowLocatorFactory.Create();
-        if (locator is null) return;   // macOS: nothing to assert
+        if (locator is null) return;   // unsupported OS: nothing to assert
         Assert.False(locator.Exists("ZZZ_no_such_window_zzz_12345"));
     }
 

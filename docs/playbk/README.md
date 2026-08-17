@@ -1,9 +1,9 @@
 # playbk — Script Execution Engine
 
-> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟢 macOS  —  🟢 works · 🟡 partial · 🔴 not available
 >
 > **Linux (X11):** the orchestrator runs; OCR (`click-text`/`assert-text`) uses Tesseract, capture uses ImageMagick, window/input use xdotool — so it needs `tesseract-ocr`, `imagemagick`, `xdotool` plus the sibling IdleOps tools on PATH. `exec`-launched apps and Wayland caveats follow the individual tools above.
-> **macOS:** runs, but inherits each tool's macOS limitations (no input backend, full-screen capture only).
+> **macOS:** verified end-to-end on macOS 26 (`wait-window`, `keyboard`, `type`, `screenshot`, `assert-text`). Needs the per-tool macOS prerequisites above — `brew install cliclick tesseract ffmpeg` plus **Accessibility** and **Screen Recording** permission for whichever app launches playbk. Inherits each tool's macOS limits: no `stpcap` recorder, and no `--element-at` for the UIA verbs.
 
 Execute YAML automation scripts that drive desktop workflows — launching apps, sending input, and capturing media.
 

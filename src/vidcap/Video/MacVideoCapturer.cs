@@ -1,3 +1,5 @@
+using IdleOps.Shared.Capture;
+
 namespace vidcap.Video;
 
 internal sealed class MacVideoCapturer : FfmpegVideoCapturer
@@ -11,7 +13,9 @@ internal sealed class MacVideoCapturer : FfmpegVideoCapturer
             Console.WriteLine("Warning: --window is currently only honored on Windows; capturing full display.");
         }
 
-        // Index 1 commonly refers to the primary display when using avfoundation screen capture.
-        return "-f avfoundation -framerate 30 -i \"1:none\" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p";
+        // The screen's index is machine-specific (cameras enumerate first), so ask
+        // ffmpeg which one it is rather than assuming.
+        var screen = AvFoundationDevices.ResolveScreenIndex();
+        return $"-f avfoundation -framerate 30 -i \"{screen}:none\" -c:v libx264 -preset veryfast -crf 22 -pix_fmt yuv420p";
     }
 }

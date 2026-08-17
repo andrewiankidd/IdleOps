@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.Versioning;
 using IdleOps.Shared.Logging;
+using IdleOps.Shared.Platform;
 
 namespace IdleOps.Shared.Capture;
 
@@ -20,10 +21,12 @@ internal sealed class MacScreenCapturer : IScreenCapturer
     public CaptureOutcome Capture(string windowPattern, string outputPath)
     {
         string[] args;
+        int requestedWidth;
         if (ScreenCapturerFactory.IsWholeScreen(windowPattern))
         {
             Console.Error.WriteLine($"[scrcap] Capturing screen -> {outputPath}");
             args = ["-x", outputPath];
+            requestedWidth = 0;   // no rect to compare against; probed below instead
         }
         else
         {
@@ -35,17 +38,57 @@ internal sealed class MacScreenCapturer : IScreenCapturer
             }
             Console.Error.WriteLine($"[scrcap] Capturing window region {b.Width}x{b.Height} at {b.X},{b.Y} -> {outputPath}");
             args = ["-x", $"-R{b.X},{b.Y},{b.Width},{b.Height}", outputPath];
+            requestedWidth = b.Width;
         }
 
         var (ok, _, stderr) = ProcessRunner.Run("screencapture", args);
         if (!ok)
         {
-            ConsoleLogger.Error($"screencapture failed: {stderr.Trim()}");
+            // "could not create image from display" is what a Screen Recording denial
+            // looks like — say so, rather than echoing a message about nothing.
+            ConsoleLogger.Error(MacPermissions.IndicatesScreenRecordingDenied(stderr)
+                ? MacPermissions.ScreenRecordingHint
+                : $"screencapture failed: {stderr.Trim()}");
             return CaptureOutcome.Failed;
         }
 
         var (w, h) = Dimensions(outputPath);
-        return new CaptureOutcome(true, w, h);
+
+        // `-R` is given in points but the file comes back in native pixels, so a window
+        // asked for at 656x422 arrives as 1312x844 on a 2x display. Deriving the factor
+        // from this capture is exact and needs no display API; the whole-screen path has
+        // no such rect, so it falls back to the probe.
+        var scale = requestedWidth > 0 && w > 0 ? (double)w / requestedWidth : BackingScale();
+        return new CaptureOutcome(true, w, h, scale <= 0 ? 1.0 : scale);
+    }
+
+    // Backing-scale probe for whole-screen captures: grab a known-size region and see how
+    // many pixels come back. Cached — it costs a capture, and it cannot change mid-run
+    // without the display changing. Reflects the main display, so a mixed-DPI multi-monitor
+    // setup reports the main display's factor.
+    private static double? _backingScale;
+
+    private static double BackingScale()
+    {
+        if (_backingScale is { } cached) return cached;
+
+        const int probePoints = 64;
+        var probe = Path.Combine(Path.GetTempPath(), $"idleops-scale-{Guid.NewGuid():N}.png");
+        try
+        {
+            var (ok, _, _) = ProcessRunner.Run("screencapture", "-x", $"-R0,0,{probePoints},{probePoints}", probe);
+            var (pw, _) = ok ? Dimensions(probe) : (0, 0);
+            _backingScale = pw > 0 ? (double)pw / probePoints : 1.0;
+        }
+        catch
+        {
+            _backingScale = 1.0;
+        }
+        finally
+        {
+            try { if (File.Exists(probe)) File.Delete(probe); } catch { /* best-effort */ }
+        }
+        return _backingScale.Value;
     }
 
     // Read pixel size back with `sips` (built-in); 0x0 if it can't be parsed.

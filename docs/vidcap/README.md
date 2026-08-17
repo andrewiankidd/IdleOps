@@ -47,7 +47,7 @@ On macOS and Linux, `--window` is accepted but ignored with a warning — full d
 
 All platforms use ffmpeg as the capture backend:
 - **Windows**: gdigrab input. For window capture, P/Invoke finds the window position/size and captures that screen region.
-- **macOS**: avfoundation full-display capture.
+- **macOS**: avfoundation full-display capture. The screen device is resolved **by name** ("Capture screen") rather than by a hardcoded index, since cameras enumerate first and the index differs per machine; set `IDLEOPS_AVFOUNDATION_VIDEO=<index>` to override. Needs **Screen Recording** permission — without it the screen device is not listed at all and vidcap says so. As with audcap, ~1.5s of device warmup counts against `--timer`.
 - **Linux**: x11grab using the `DISPLAY` environment variable.
 
 Video is encoded with libx264, ultrafast preset, yuv420p pixel format.

@@ -29,7 +29,11 @@ internal sealed class UnixSpeechEngine : ISpeechEngine
             {
                 psi.ArgumentList.Add("-o");
                 psi.ArgumentList.Add(outputPath);
-                psi.ArgumentList.Add("--file-format=WAVE");
+                // `--file-format=WAVE` is rejected outright ("Opening output file failed:
+                // fmt?"), as is a bare .wav path — `say` picks the container from the
+                // extension but needs an explicit PCM data format to go with it. This one
+                // is `say`'s standard 16-bit LE PCM and yields a normal RIFF/WAVE file.
+                psi.ArgumentList.Add("--data-format=LEI16@22050");
             }
             else
             {

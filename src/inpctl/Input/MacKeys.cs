@@ -39,6 +39,22 @@ internal static class MacKeys
         _ => null,
     };
 
+    /// <summary>
+    /// The comma-separated cliclick modifier list to hold for <paramref name="keys"/>, or
+    /// null when the request names anything cliclick cannot hold. cliclick's kd:/ku: take
+    /// modifiers only, so "CTRL+SHIFT" holds but "W" (or "CTRL+S") cannot.
+    /// </summary>
+    public static string? TranslateHold(string keys)
+    {
+        var mods = new List<string>();
+        foreach (var part in keys.Split([',', '+'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (Modifier(part) is not { } m) return null;   // an ordinary key: not holdable
+            if (!mods.Contains(m)) mods.Add(m);
+        }
+        return mods.Count > 0 ? string.Join(",", mods) : null;
+    }
+
     /// <summary>cliclick args for a chord/sequence, e.g. "CTRL+S" -> ["kd:ctrl","t:s","ku:ctrl"].</summary>
     public static List<string> Translate(string chord)
     {

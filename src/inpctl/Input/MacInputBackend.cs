@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.Versioning;
+using IdleOps.Shared.Platform;
 
 namespace inpctl.Input;
 
@@ -59,7 +60,12 @@ internal sealed class MacInputBackend : IInputBackend
     public bool SendKeyboard(string chord, nint target, bool background)
     {
         var args = MacKeys.Translate(chord);
-        return args.Count > 0 && Run("cliclick", args.ToArray()).ok;
+        if (args.Count == 0)
+        {
+            Console.Error.WriteLine($"[inpctl] '{chord}' has no key to press on macOS (a chord of modifiers alone cannot be sent).");
+            return false;
+        }
+        return Run("cliclick", args.ToArray()).ok;
     }
 
     public bool TypeText(string text, nint target, bool background) => Run("cliclick", $"t:{text}").ok;
@@ -85,23 +91,33 @@ internal sealed class MacInputBackend : IInputBackend
         return Run("cliclick", $"dd:{ox + sx},{oy + sy}", $"du:{ox + ex},{oy + ey}").ok;
     }
 
-    // cliclick holds a key down across separate invocations (CGEvent keydown persists),
-    // so keydown, wait, keyup mirrors the Linux/Windows hold. Simple keys only.
+    // cliclick's kd:/ku: hold a key down across invocations, but it accepts *only*
+    // modifiers there (alt, cmd, ctrl, fn, shift) — `kd:s` is rejected outright. There
+    // is no macOS CLI equivalent of the Windows/X11 held ordinary key, so a modifier
+    // hold is honoured for real and anything else fails with the reason rather than
+    // emitting a command cliclick will reject.
     public bool HoldForeground(string keys, double durationSeconds, CancellationToken token) => Hold(keys, durationSeconds, token);
     public bool HoldBackground(string keys, nint target, int intervalMs, double durationSeconds, CancellationToken token) => Hold(keys, durationSeconds, token);
 
     private static bool Hold(string keys, double durationSeconds, CancellationToken token)
     {
-        var spec = MacKeys.Translate(keys).FirstOrDefault(s => s.StartsWith("kp:") || s.StartsWith("t:"));
-        if (spec is null) return false;
-        var name = spec.Split(':', 2)[1];
-        if (!Run("cliclick", $"kd:{name}").ok) return false;
+        var mods = MacKeys.TranslateHold(keys);
+        if (mods is null)
+        {
+            Console.Error.WriteLine(
+                $"[inpctl] --hold '{keys}' is not supported on macOS: cliclick can only hold modifier keys " +
+                "(ALT/OPTION, CTRL, SHIFT, WIN/CMD, FN), and macOS exposes no CLI for holding an ordinary key. " +
+                "Use --keyboard for discrete presses instead.");
+            return false;
+        }
+
+        if (!Run("cliclick", $"kd:{mods}").ok) return false;
         try
         {
             var deadline = durationSeconds > 0 ? DateTime.UtcNow.AddSeconds(durationSeconds) : DateTime.MaxValue;
             while (!token.IsCancellationRequested && DateTime.UtcNow < deadline) Thread.Sleep(20);
         }
-        finally { Run("cliclick", $"ku:{name}"); }
+        finally { Run("cliclick", $"ku:{mods}"); }
         return true;
     }
 
@@ -138,6 +154,20 @@ internal sealed class MacInputBackend : IInputBackend
             var so = p.StandardOutput.ReadToEnd();
             var se = p.StandardError.ReadToEnd();
             p.WaitForExit();
+
+            // cliclick exits 0 after doing nothing when Accessibility is denied, and
+            // osascript's -1743/-1712 arrive as ordinary errors — either way, reporting
+            // success would tell the caller a click landed when none did.
+            if (MacPermissions.IndicatesAccessibilityDenied(se))
+            {
+                if (!_warnedAccessibility)
+                {
+                    _warnedAccessibility = true;
+                    Console.Error.WriteLine($"[inpctl] {MacPermissions.AccessibilityHint}");
+                }
+                return (false, so, se);
+            }
+
             if (p.ExitCode != 0 && !string.IsNullOrWhiteSpace(se)) Console.Error.WriteLine($"[inpctl] {file}: {se.Trim()}");
             return (p.ExitCode == 0, so, se);
         }
@@ -147,4 +177,7 @@ internal sealed class MacInputBackend : IInputBackend
             return (false, "", "");
         }
     }
+
+    // One hint per run: every cliclick call repeats the warning otherwise.
+    private static bool _warnedAccessibility;
 }

@@ -35,4 +35,23 @@ public class MacKeysTests
     {
         Assert.Equal(new[] { "kd:ctrl", "t:a", "ku:ctrl", "kp:fwd-delete" }, MacKeys.Translate("CTRL+A, DELETE"));
     }
+
+    // cliclick's kd:/ku: accept modifiers only — `kd:s` is rejected with a non-zero exit,
+    // so a hold request naming an ordinary key has to be refused rather than emitted.
+    [Fact]
+    public void Hold_Modifiers_AreHoldable()
+    {
+        Assert.Equal("ctrl", MacKeys.TranslateHold("CTRL"));
+        Assert.Equal("cmd", MacKeys.TranslateHold("WIN"));
+        Assert.Equal("ctrl,shift", MacKeys.TranslateHold("CTRL+SHIFT"));
+    }
+
+    [Fact]
+    public void Hold_OrdinaryKey_IsRefused()
+    {
+        Assert.Null(MacKeys.TranslateHold("W"));
+        Assert.Null(MacKeys.TranslateHold("CTRL+S"));   // the key half cannot be held
+        Assert.Null(MacKeys.TranslateHold("ENTER"));
+        Assert.Null(MacKeys.TranslateHold(""));
+    }
 }

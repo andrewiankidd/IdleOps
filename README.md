@@ -4,9 +4,24 @@ IdleOps is a modular toolkit for automating desktop interactions, capturing medi
 
 ## Components
 
-Platform support: 🟢 works · 🟡 partial / **macOS: written but UNVERIFIED** · 🔴 not available.
+Platform support: 🟢 works · 🟡 partial · 🔴 not available.
 
-> **macOS status:** the macOS backends (input via `cliclick`, per-window capture via `screencapture`, window control + accessibility via `osascript`/System Events) are **written but not yet run on a Mac** — they compile and their pure logic is unit-tested, but end-to-end behaviour is unvalidated and needs testing on real hardware (plus `brew install cliclick` and Accessibility permission). Treat 🟡-macOS as "code exists, verify before relying on it."
+> **macOS status:** the macOS backends have now been **run and verified on real hardware**
+> (macOS 26, Apple silicon, Retina): screenshots, OCR, image matching, mouse/keyboard input,
+> window management, screen recording, loopback audio, text-to-speech and end-to-end `playbk`
+> runs all work. Two gaps remain: `stpcap` has no recorder backend, and `uiactl` cannot do
+> `--element-at`. Before first use:
+>
+> 1. `brew install cliclick tesseract ffmpeg` (plus [BlackHole](https://github.com/ExistentialAudio/BlackHole) for `audcap` — macOS exposes no system-audio input of its own).
+> 2. Grant the app that runs the tools (Terminal, iTerm, or your IDE) **Accessibility** and
+>    **Screen Recording** under System Settings › Privacy & Security — plus **Microphone**
+>    for `audcap`. Without them the tools now fail with an explicit message rather than
+>    silently doing nothing.
+>
+> **Retina note:** captures are saved at native pixel resolution while window bounds and
+> input are in points. `txtfnd`/`imgfnd` return point coordinates, so their output feeds
+> straight into `inpctl` — but a raw pixel coordinate read off a screenshot yourself will be
+> 2× too large.
 
 ### Capture
 | Tool | Description | Win | Lin | Mac |
@@ -14,17 +29,17 @@ Platform support: 🟢 works · 🟡 partial / **macOS: written but UNVERIFIED**
 | **[audcap](docs/audcap/README.md)** | Cross-platform system audio capture (WAV) | 🟢 | 🟢 | 🟢 |
 | **[vidcap](docs/vidcap/README.md)** | Cross-platform screen/window video capture (MP4) | 🟢 | 🟢 | 🟢 |
 | **[outcap](docs/outcap/README.md)** | Synchronized audio + video capture and merge | 🟢 | 🟢 | 🟢 |
-| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) | 🟢 | 🟢 | 🟡 |
+| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) | 🟢 | 🟢 | 🟢 |
 
 ### Automation
 | Tool | Description | Win | Lin | Mac |
 |------|-------------|:---:|:---:|:---:|
-| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, assert-text, type, keyboard, screenshot, speak, UIA verbs) | 🟢 | 🟢 | 🟡 |
-| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management | 🟢 | 🟢 | 🟡 |
+| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, assert-text, type, keyboard, screenshot, speak, UIA verbs) | 🟢 | 🟢 | 🟢 |
+| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management | 🟢 | 🟢 | 🟢 |
 | **[uiactl](docs/uiactl/README.md)** | Element automation by accessibility tree (Windows UIA / Linux AT-SPI2), focus-free | 🟢 | 🟢 | 🟡 |
-| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates | 🟢 | 🟢 | 🟡 |
-| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image (pure-managed template match) | 🟢 | 🟢 | 🟡 |
-| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions | 🟢 | 🟢 | 🟡 |
+| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates | 🟢 | 🟢 | 🟢 |
+| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image (pure-managed template match) | 🟢 | 🟢 | 🟢 |
+| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions | 🟢 | 🟢 | 🟢 |
 | **[stpcap](docs/stpcap/README.md)** | Record user input into YAML scripts (Windows hooks / Linux XRecord) | 🟢 | 🟢 | 🟡 |
 
 ### Utilities
