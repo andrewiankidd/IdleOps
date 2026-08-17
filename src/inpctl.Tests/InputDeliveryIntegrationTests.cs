@@ -1,3 +1,4 @@
+using System.Runtime.Versioning;
 using System.Threading;
 using inpctl.Input;
 using Xunit;
@@ -7,11 +8,16 @@ namespace inpctl.Tests;
 // End-to-end: post input to a real (message-only) window and assert its WndProc
 // received it with the right codes. Needs a Windows desktop/message pump, so these
 // are excluded from CI by the "IntegrationTests" name filter (build.yml).
+//
+// [WindowsOnlyFact] rather than [Fact] so they also self-skip off Windows: the CI
+// filter is the only thing that was hiding them, and a plain `dotnet test` on
+// Linux/macOS failed all three on user32 P/Invoke.
+[SupportedOSPlatform("windows")]
 public class InputDeliveryIntegrationTests
 {
     private const int VkF = 0x46;
 
-    [Fact]
+    [WindowsOnlyFact]
     public void BackgroundKeyboard_PostsCorrectVirtualKey()
     {
         using var win = new MessageWindow();
@@ -25,7 +31,7 @@ public class InputDeliveryIntegrationTests
         Assert.Equal(0, win.Count(MessageWindow.WM_KEYDOWN, 0x146));
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public void BackgroundHold_RepostsKeyDown_ThenReleases()
     {
         using var win = new MessageWindow();
@@ -38,7 +44,7 @@ public class InputDeliveryIntegrationTests
         Assert.True(win.Count(MessageWindow.WM_KEYUP, VkF) >= 1, "hold should post WM_KEYUP on release");
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public void BackgroundType_PostsCharacters()
     {
         using var win = new MessageWindow();

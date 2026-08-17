@@ -1,7 +1,9 @@
+using System.Runtime.Versioning;
 using IdleOps.Shared.Capture;
 
 namespace audcap.Audio;
 
+[SupportedOSPlatform("macos")]
 internal sealed class MacAudioCapturer : FfmpegAudioCapturer
 {
     // macOS has no system-audio input device, so this captures whichever avfoundation

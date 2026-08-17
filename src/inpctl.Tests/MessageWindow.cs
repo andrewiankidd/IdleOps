@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Threading;
 
 namespace inpctl.Tests;
@@ -12,6 +13,7 @@ namespace inpctl.Tests;
 /// focus/OCR — that inpctl's PostMessage-based (background) input actually lands in
 /// a window's WndProc with the correct virtual-key codes.
 /// </summary>
+[SupportedOSPlatform("windows")]
 internal sealed class MessageWindow : IDisposable
 {
     public const int WM_KEYDOWN = 0x0100;

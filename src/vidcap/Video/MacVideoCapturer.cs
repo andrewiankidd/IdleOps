@@ -1,7 +1,9 @@
+using System.Runtime.Versioning;
 using IdleOps.Shared.Capture;
 
 namespace vidcap.Video;
 
+[SupportedOSPlatform("macos")]
 internal sealed class MacVideoCapturer : FfmpegVideoCapturer
 {
     public override string Platform => "macOS";

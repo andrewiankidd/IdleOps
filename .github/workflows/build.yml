@@ -20,10 +20,10 @@ jobs:
     name: Windows (full)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -76,7 +76,7 @@ jobs:
           }
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: idleops-win-x64
           path: publish/
@@ -97,11 +97,21 @@ jobs:
           - os: macos-latest
             rid: osx-arm64
     runs-on: ${{ matrix.os }}
+    env:
+      # Unattended apt, used by every install below.
+      #   DEBIAN_FRONTEND/NEEDRESTART_* — a debconf or needrestart prompt on a runner
+      #     with no tty blocks forever rather than failing.
+      #   DPkg::Lock::Timeout — apt waits on the dpkg lock *indefinitely* by default, so
+      #     an unattended-upgrades run holding it wedges the job until the 6h ceiling.
+      #     Bounded, it fails with a readable error instead.
+      # Passed through `sudo` explicitly: sudo resets the environment, so exporting these
+      # as plain job env would not reach apt.
+      APT: "DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get -o DPkg::Lock::Timeout=180"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
@@ -130,29 +140,33 @@ jobs:
       # OCR-locate text with txtfnd — all under a headless Xvfb. macOS has no X11.
       - name: Linux X11 end-to-end (inpctl + scrcap + txtfnd)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 15
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq xdotool imagemagick xvfb openbox xterm wmctrl tesseract-ocr
+          sudo $APT install -y -qq xdotool imagemagick xvfb openbox xterm wmctrl tesseract-ocr
           bash scripts/linux-e2e.sh
 
       # AT-SPI accessibility e2e for uiactl (drives gnome-calculator). Self-skips if
       # the a11y stack is unavailable. Linux only.
       - name: Linux AT-SPI end-to-end (uiactl)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 15
         run: |
-          sudo apt-get install -y -qq at-spi2-core python3-pyatspi dbus-x11 gnome-calculator
+          sudo $APT install -y -qq at-spi2-core python3-pyatspi dbus-x11 gnome-calculator
           bash scripts/linux-uiactl-e2e.sh
 
       # XRecord input-recording e2e for stpcap. Linux only; self-skips without python3-xlib.
       - name: Linux XRecord end-to-end (stpcap)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 15
         run: |
-          sudo apt-get install -y -qq python3-xlib
+          sudo $APT install -y -qq python3-xlib
           bash scripts/linux-stpcap-e2e.sh
 
       # Full-stack e2e: the playbk orchestrator running a real playbook on Linux.
       - name: Linux end-to-end (playbk orchestrator)
         if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 15
         run: bash scripts/linux-playbk-e2e.sh
 
       - name: Publish downloadable binaries
@@ -170,7 +184,7 @@ jobs:
           done
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: idleops-${{ matrix.rid }}
           path: publish/
@@ -186,11 +200,11 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Each artifact lands in its own dist/idleops-<rid>/ directory.
       - name: Download the built bundles
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: idleops-*
           path: dist
@@ -221,7 +235,7 @@ jobs:
         run: gh release delete latest-main --yes --cleanup-tag --repo "${{ github.repository }}" || true
 
       - name: Publish rolling latest-main release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: latest-main
           name: "Latest main build"
