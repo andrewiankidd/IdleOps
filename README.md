@@ -77,7 +77,7 @@ Define a `.idleops.yaml` script that launches your app, navigates the UI via OCR
 
 > **Real-world examples**:
 > - **[Crosspose](https://github.com/andrewiankidd/Crosspose)** — **15 screenshots**: full sidebar navigation, container details tabs, dark/light mode variants, and per-GUI screens. Scripts live in the Crosspose repo at [`assets/idleops/`](https://github.com/andrewiankidd/Crosspose/tree/main/assets/idleops) (`crosspose-gui-screenshots.idleops.yaml` et al).
-> - **POSEIDEN** — GUI screenshots for a Rust/Tauri desktop app's docs, driven against an anonymized demo instance (`poseiden-gui-screenshots.idleops.yaml`).
+> - **[POSEIDON](https://github.com/andrewiankidd/POSEIDON)** — doc screenshots for a Rust/Tauri app, shot against the **web** build in a browser (the same bundle the Tauri window wraps) on a local playground instance seeded with stub demo data. Script lives in the POSEIDON repo at [`tools/screenshots/`](https://github.com/andrewiankidd/POSEIDON/tree/main/tools/screenshots) (`poseidon-web-screenshots.idleops.yaml`).
 >
 > Both keep their `.idleops.yaml` scripts in their own repos and link back to this project's [schema](schema/idleops.schema.json) via a `# yaml-language-server: $schema=…` modeline.
 

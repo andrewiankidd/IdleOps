@@ -8,7 +8,7 @@ namespace llmctl.Llm;
 
 /// <summary>
 /// Embedded in-process GGUF backend (offline, no external server) via LLamaSharp —
-/// the .NET equivalent of POSEIDEN's candle path. Text-only; vision tasks fall
+/// the .NET equivalent of POSEIDON's candle path. Text-only; vision tasks fall
 /// through to an online/Ollama VL model. The model is auto-downloaded on first use.
 /// </summary>
 internal sealed class EmbeddedBackend : IChatBackend, IDisposable

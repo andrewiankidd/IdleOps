@@ -1,7 +1,7 @@
 namespace llmctl.Llm;
 
 /// <summary>
-/// Curated AI backends (ported from POSEIDEN's poseiden-ai presets): hosted
+/// Curated AI backends (ported from POSEIDON's poseidon-ai presets): hosted
 /// OpenAI-compatible providers (bring an API key) and small offline GGUF models
 /// that are downloaded and run in-process. Kept as data so the registry can
 /// validate against them and a UI could render the choices.

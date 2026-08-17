@@ -5,7 +5,7 @@ namespace llmctl.Llm;
 
 /// <summary>
 /// An ordered registry of AI integrations (order = priority), ported from
-/// POSEIDEN's LlmConfig. The first entry that is compatible with the platform AND
+/// POSEIDON's LlmConfig. The first entry that is compatible with the platform AND
 /// configured becomes active; callers can walk the ordered candidates and fall
 /// through on runtime failure, so you always get whatever AI is actually available.
 /// </summary>

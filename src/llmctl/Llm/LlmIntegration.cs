@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 namespace llmctl.Llm;
 
 /// <summary>
-/// One AI integration in the ordered registry (ported from POSEIDEN's
+/// One AI integration in the ordered registry (ported from POSEIDON's
 /// LlmIntegration). kind = "online" (HTTP: cloud or local endpoint) or "offline"
 /// (embedded GGUF). compatible() gates on platform; configured() gates on being
 /// filled in enough to run; build() produces the callable backend.

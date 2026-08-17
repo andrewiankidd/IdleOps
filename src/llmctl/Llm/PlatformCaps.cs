@@ -2,7 +2,7 @@ namespace llmctl.Llm;
 
 /// <summary>
 /// What this machine can run — drives integration compatibility, priority, and
-/// model sizing (ported from POSEIDEN's PlatformCaps; webgpu dropped since IdleOps
+/// model sizing (ported from POSEIDON's PlatformCaps; webgpu dropped since IdleOps
 /// isn't browser). VRAM/cores let a strong box pick a strong model out of the box
 /// and a weak one stay fast.
 /// </summary>
@@ -52,7 +52,7 @@ internal sealed record PlatformCaps(bool Embedded, bool Gpu, int? VramMb, int? C
     /// <summary>
     /// Highest reasonably-runnable offline model id for this kind/device/caps —
     /// so a strong box gets a strong model and a weak one stays fast (ported from
-    /// POSEIDEN's recommend_model).
+    /// POSEIDON's recommend_model).
     /// </summary>
     public static string RecommendModel(string kind, string device, PlatformCaps caps)
     {

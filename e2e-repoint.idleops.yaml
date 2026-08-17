@@ -1,17 +1,17 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/andrewiankidd/IdleOps/main/schema/idleops.schema.json
 # Desktop repoint e2e — onboarding path (fresh first-run).
-# POSEIDEN_DATA_DIR points at an empty dir → app boots to first-run onboarding.
+# POSEIDON_DATA_DIR points at an empty dir → app boots to first-run onboarding.
 # Drives: Welcome → "Connect to a shared instance" → type hosted URL → Connect,
 # then verifies the reloaded remote client shows hosted stub data.
 steps:
-  - name: Launch the POSEIDEN desktop app
+  - name: Launch the POSEIDON desktop app
     action: exec
-    args: cmd /c start "" "C:\git\POSEIDON\target\debug\poseiden-app.exe"
+    args: cmd /c start "" "C:\git\POSEIDON\target\debug\poseidon-app.exe"
     wait: false
 
   - name: Wait for the app window
     action: wait-window
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     timeout: 30
 
   - name: Let the webview finish first paint
@@ -20,12 +20,12 @@ steps:
 
   - name: Screenshot the onboarding overlay
     action: screenshot
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     output: 01-onboard.png
 
   - name: Choose "Connect to a shared instance"
     action: click-text
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "Connect to a shared instance"
 
   - name: Let the remote step render
@@ -34,27 +34,27 @@ steps:
 
   - name: Screenshot the remote-URL step
     action: screenshot
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     output: 02-remote-step.png
 
   - name: Focus the instance-URL field (click its placeholder)
     action: click-text
-    window: "POSEIDEN*"
-    text: "poseiden.example.com"
+    window: "POSEIDON*"
+    text: "poseidon.example.com"
 
   - name: Type the hosted instance URL
     action: type
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "http://127.0.0.1:8737"
 
   - name: Screenshot the filled URL field
     action: screenshot
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     output: 03-url-filled.png
 
   - name: Connect (reloads as a remote client)
     action: click-text
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "Connect"
 
   - name: Wait for the reload against the hosted instance
@@ -63,17 +63,17 @@ steps:
 
   - name: Verify the app is now in Remote mode
     action: assert-text
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "Remote instance"
 
   - name: Screenshot the repointed dashboard
     action: screenshot
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     output: 04-remote-dashboard.png
 
   - name: Go to Work Items
     action: click-text
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "Work Items"
 
   - name: Let the list render
@@ -82,10 +82,10 @@ steps:
 
   - name: Verify a known stub work item is present (hosted data flowed through)
     action: assert-text
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     text: "Ship the reports engine"
 
   - name: Screenshot the repointed client showing hosted data
     action: screenshot
-    window: "POSEIDEN*"
+    window: "POSEIDON*"
     output: 05-repointed-workitems.png
