@@ -41,6 +41,40 @@ jobs:
             -i src/playbk/inputs/smoke-test.idleops.yaml `
             -o ./smoke-outputs
 
+      # Windows is the only platform that ships every tool, so its bundle is the
+      # complete set — the multi-targeted ones publish their Windows TFM here.
+      - name: Publish downloadable binaries
+        run: |
+          foreach ($p in @('cnvrtr','audcap','vidcap','outcap','inpctl','scrcap','imgfnd','llmctl','uiactl','stpcap')) {
+            dotnet publish "src/$p/$p.csproj" -c Release -r win-x64 --self-contained false -o "publish/$p"
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          foreach ($p in @('spkbak','txtfnd','waitfr','playbk')) {
+            dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 --self-contained false -o "publish/$p"
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
+          # Make the playbk bundle self-contained: co-locate the tools it shells out to.
+          # Never overwrite playbk's own files (matches the `cp -rn` on the other legs).
+          foreach ($t in @('inpctl','scrcap','txtfnd','waitfr','uiactl','outcap')) {
+            $src = "publish/$t"
+            if (-not (Test-Path $src)) { continue }
+            $root = (Resolve-Path $src).Path
+            Get-ChildItem $src -Recurse -File | ForEach-Object {
+              $rel = $_.FullName.Substring($root.Length).TrimStart('\')
+              $dest = Join-Path "publish/playbk" $rel
+              if (-not (Test-Path $dest)) {
+                New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+                Copy-Item $_.FullName $dest
+              }
+            }
+          }
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: idleops-win-x64
+          path: publish/
+
   # Linux/macOS build, test and publish the cross-platform tools. Input (inpctl),
   # screen capture (scrcap), image matching (imgfnd) and the AI layer (llmctl) now
   # run here via platform backends (xdotool/import on Linux) alongside the media
@@ -134,3 +168,73 @@ jobs:
         with:
           name: idleops-${{ matrix.rid }}
           path: publish/
+
+  # Rolling "latest" release: every green push to main republishes the per-platform
+  # bundles, so there is always a current download without cutting a version. Gated on
+  # both build jobs, so a broken commit leaves the previous assets in place.
+  release:
+    name: Rolling release (latest)
+    needs: [windows, crossplatform]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Each artifact lands in its own dist/idleops-<rid>/ directory.
+      - name: Download the built bundles
+        uses: actions/download-artifact@v4
+        with:
+          pattern: idleops-*
+          path: dist
+
+      - name: Package one archive per platform
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cd dist
+          for d in idleops-*; do
+            [ -d "$d" ] || continue
+            case "$d" in
+              # tar.gz on Unix keeps the executable bit on the apphost binaries; zip drops
+              # it, which would leave the downloaded tools unrunnable without a chmod.
+              *win-x64) (cd "$d" && zip -qr "../../out/$d.zip" .) ;;
+              *)        tar -czf "../out/$d.tar.gz" -C "$d" . ;;
+            esac
+          done
+          ls -la ../out
+
+      - name: Update the rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes=$(cat <<EOF
+          Rolling build of \`main\`, rebuilt on every green push — these assets always match the newest commit.
+
+          | | |
+          |---|---|
+          | Commit | [\`${GITHUB_SHA:0:7}\`](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
+          | Built | $(date -u '+%Y-%m-%d %H:%M UTC') |
+
+          | Asset | Contents |
+          |---|---|
+          | \`idleops-win-x64.zip\` | every tool, including the Windows-only ones |
+          | \`idleops-linux-x64.tar.gz\` | the cross-platform tools (X11) |
+          | \`idleops-osx-arm64.tar.gz\` | the cross-platform tools (Apple silicon) |
+
+          Framework-dependent builds: they need the [.NET 10 runtime](https://dotnet.microsoft.com/download).
+          See [setup](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/setup.md) for the per-platform
+          prerequisites (ffmpeg everywhere; xdotool/ImageMagick/Tesseract on Linux; cliclick/Tesseract plus
+          Accessibility and Screen Recording permission on macOS).
+          EOF
+          )
+
+          # Recreated rather than edited: a release is pinned to its tag, so the tag itself
+          # has to move for "latest" to keep meaning latest.
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest out/* \
+            --title "Latest build (main)" \
+            --notes "$notes" \
+            --target "$GITHUB_SHA"
