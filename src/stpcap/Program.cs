@@ -37,6 +37,7 @@ internal static class Program
 
         if (showHelp)
         {
+            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("stpcap"));
             Console.WriteLine("""
                 Usage: stpcap [--output <file>] [--window "<filter>"]
 

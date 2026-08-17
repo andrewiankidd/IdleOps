@@ -26,6 +26,7 @@ internal static class Program
 
         if (showHelp)
         {
+            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("spkbak"));
             Console.WriteLine("""
                 Usage: spkbak --text "<text>" [--output <file.wav>] [--voice "<name>"]
 

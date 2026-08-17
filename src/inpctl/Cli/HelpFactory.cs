@@ -4,6 +4,7 @@ internal static class HelpFactory
 {
     public static void PrintHelp()
     {
+        Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("inpctl"));
         Console.WriteLine("""
             Usage: inpctl [--window "<title>"] [--keyboard "<keys>"] [--type "<text>"] [--leftmouse "x,y"]
 

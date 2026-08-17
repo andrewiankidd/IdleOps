@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Web;
@@ -619,8 +620,24 @@ internal static class Program
         return $"{(int)(span.TotalDays / 365)}y";
     }
 
+    /// <summary>
+    /// Local copy of the shared BuildInfo banner. cnvrtr is the one tool that does not
+    /// reference `shared` — it is a standalone utility, and taking the reference would pull
+    /// System.Drawing and friends into what is currently the smallest binary in the set.
+    /// Six duplicated lines is the cheaper trade.
+    /// </summary>
+    private static string Banner()
+    {
+        var informational = Assembly.GetEntryAssembly()
+            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        var plus = informational?.IndexOf('+') ?? -1;
+        var commit = plus >= 0 && plus < informational!.Length - 1 ? informational[(plus + 1)..] : null;
+        return commit is { Length: > 0 } c ? $"IdleOps - cnvrtr ({c})" : "IdleOps - cnvrtr";
+    }
+
     private static void PrintHelp()
     {
+        Console.WriteLine(Banner());
         Console.WriteLine("""
             Usage: cnvrtr --value "<input>" [--from <format>] --to <format>
                    echo "input" | cnvrtr --to <format>

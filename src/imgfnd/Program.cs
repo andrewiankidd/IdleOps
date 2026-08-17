@@ -26,6 +26,7 @@ internal static class Program
 
         if (showHelp || (string.IsNullOrWhiteSpace(window) && !showVersion) || (string.IsNullOrWhiteSpace(imagePath) && !showVersion))
         {
+            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("imgfnd"));
             Console.WriteLine("""
                 Usage: imgfnd --window "<title>" --image <reference.png> [--threshold 0.8]
 

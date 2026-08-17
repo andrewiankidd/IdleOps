@@ -4,6 +4,7 @@ internal static class HelpFactory
 {
     public static void PrintHelp()
     {
+        Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("uiactl"));
         Console.WriteLine("""
             Usage: uiactl -w "<title>" [selector] <verb>
 

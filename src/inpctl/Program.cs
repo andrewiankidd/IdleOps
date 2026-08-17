@@ -7,7 +7,10 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        Console.WriteLine($"[inpctl] args: {string.Join(' ', args)}");
+        // stderr, not stdout: this is a debug echo, and stdout is reserved for
+        // machine-readable output (README's "pipe them together" convention). On stdout it
+        // also sat above the help banner, so --help led with noise instead of the version.
+        Console.Error.WriteLine($"[inpctl] args: {string.Join(' ', args)}");
 
         var options = OptionsParser.Parse(args);
 

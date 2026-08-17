@@ -9,4 +9,25 @@
     -->
     <SelfContained>false</SelfContained>
   </PropertyGroup>
+
+  <!--
+    Stamp the commit into every binary. The SDK appends SourceRevisionId to
+    AssemblyInformationalVersion as "1.0.0+sha", which BuildInfo reads back at runtime so
+    the help and version output can say which build they came from. AssemblyVersion is a
+    constant 1.0.0.0, so without this there is nothing to distinguish one build from
+    another, and the rolling latest-main release changes on every push.
+
+    Best-effort: a source drop with no git, or no git on PATH, just yields no suffix.
+  -->
+  <Target Name="StampSourceRevision" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo"
+          Condition="'$(SourceRevisionId)' == ''">
+    <Exec Command="git rev-parse --short=7 HEAD" ConsoleToMSBuild="true" ContinueOnError="true"
+          StandardOutputImportance="low" StandardErrorImportance="low">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_IdleOpsGitSha" />
+      <Output TaskParameter="ExitCode" PropertyName="_IdleOpsGitExit" />
+    </Exec>
+    <PropertyGroup>
+      <SourceRevisionId Condition="'$(_IdleOpsGitExit)' == '0' And '$(_IdleOpsGitSha)' != ''">$(_IdleOpsGitSha.Trim())</SourceRevisionId>
+    </PropertyGroup>
+  </Target>
 </Project>

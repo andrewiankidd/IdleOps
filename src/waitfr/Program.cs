@@ -30,6 +30,7 @@ internal static class Program
 
         if (options.ShowHelp || string.IsNullOrWhiteSpace(window))
         {
+            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("waitfr"));
             Console.WriteLine("""
                 Usage: waitfr --window "<title>" [--text "<search>"] [--timeout <seconds>] [--gone]
 
