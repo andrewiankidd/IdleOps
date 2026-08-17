@@ -50,13 +50,13 @@ Platform support: 🟢 works · 🟡 partial · 🔴 not available.
 
 ## Download
 
-Prebuilt bundles are attached to the [latest release](https://github.com/andrewiankidd/IdleOps/releases/latest), rebuilt on every green push to `main`:
+Prebuilt bundles are attached to the [`latest-main`](https://github.com/andrewiankidd/IdleOps/releases/tag/latest-main) release, refreshed on every green push to `main`:
 
 | Platform | Asset | Contents |
 |---|---|---|
-| Windows | [`idleops-win-x64.zip`](https://github.com/andrewiankidd/IdleOps/releases/latest/download/idleops-win-x64.zip) | every tool |
-| Linux (X11) | [`idleops-linux-x64.tar.gz`](https://github.com/andrewiankidd/IdleOps/releases/latest/download/idleops-linux-x64.tar.gz) | the cross-platform tools |
-| macOS (Apple silicon) | [`idleops-osx-arm64.tar.gz`](https://github.com/andrewiankidd/IdleOps/releases/latest/download/idleops-osx-arm64.tar.gz) | the cross-platform tools |
+| Windows | [`idleops-win-x64.zip`](https://github.com/andrewiankidd/IdleOps/releases/download/latest-main/idleops-win-x64.zip) | every tool |
+| Linux (X11) | [`idleops-linux-x64.tar.gz`](https://github.com/andrewiankidd/IdleOps/releases/download/latest-main/idleops-linux-x64.tar.gz) | the cross-platform tools |
+| macOS (Apple silicon) | [`idleops-osx-arm64.tar.gz`](https://github.com/andrewiankidd/IdleOps/releases/download/latest-main/idleops-osx-arm64.tar.gz) | the cross-platform tools |
 
 They are framework-dependent, so they need the [.NET 10 runtime](https://dotnet.microsoft.com/download) — plus the per-platform prerequisites in [setup](docs/setup.md). Or build from source:
 

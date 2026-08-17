@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Per-ref: a newer push supersedes an in-flight run rather than stacking matrix
+# builds behind it. Matches the release workflows in TWANGA and POSEIDON.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Windows builds and tests the FULL solution (all tools, including the
   # Windows-only ones: inpctl/uiactl/txtfnd/scrcap/imgfnd/waitfr/stpcap/playbk).
@@ -169,11 +175,11 @@ jobs:
           name: idleops-${{ matrix.rid }}
           path: publish/
 
-  # Rolling "latest" release: every green push to main republishes the per-platform
+  # Rolling `latest-main` release: every green push to main republishes the per-platform
   # bundles, so there is always a current download without cutting a version. Gated on
   # both build jobs, so a broken commit leaves the previous assets in place.
   release:
-    name: Rolling release (latest)
+    name: Refresh latest-main release
     needs: [windows, crossplatform]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
@@ -205,36 +211,38 @@ jobs:
           done
           ls -la ../out
 
-      - name: Update the rolling release
+      # Deleted and recreated rather than updated in place: action-gh-release will
+      # happily refresh an existing release, but it does NOT move the git tag to the
+      # new commit — so `latest-main` would keep pointing at whatever commit first
+      # created it. Same approach as TWANGA and POSEIDON. Idempotent on a fresh repo.
+      - name: Delete previous latest-main release + tag
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          notes=$(cat <<EOF
-          Rolling build of \`main\`, rebuilt on every green push — these assets always match the newest commit.
+        run: gh release delete latest-main --yes --cleanup-tag --repo "${{ github.repository }}" || true
 
-          | | |
-          |---|---|
-          | Commit | [\`${GITHUB_SHA:0:7}\`](https://github.com/${GITHUB_REPOSITORY}/commit/${GITHUB_SHA}) |
-          | Built | $(date -u '+%Y-%m-%d %H:%M UTC') |
+      - name: Publish rolling latest-main release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-main
+          name: "Latest main build"
+          # prerelease + make_latest:false keep this off the "Latest release" badge, so
+          # a future v* tag owns that instead of a rolling dev build.
+          prerelease: true
+          make_latest: "false"
+          draft: false
+          target_commitish: ${{ github.sha }}
+          files: out/*
+          body: |
+            Auto-built from `main` at `${{ github.sha }}` — refreshed on every green push, so these
+            assets always match the newest commit.
 
-          | Asset | Contents |
-          |---|---|
-          | \`idleops-win-x64.zip\` | every tool, including the Windows-only ones |
-          | \`idleops-linux-x64.tar.gz\` | the cross-platform tools (X11) |
-          | \`idleops-osx-arm64.tar.gz\` | the cross-platform tools (Apple silicon) |
+            | Asset | Contents |
+            |---|---|
+            | `idleops-win-x64.zip` | every tool, including the Windows-only ones |
+            | `idleops-linux-x64.tar.gz` | the cross-platform tools (X11) |
+            | `idleops-osx-arm64.tar.gz` | the cross-platform tools (Apple silicon) |
 
-          Framework-dependent builds: they need the [.NET 10 runtime](https://dotnet.microsoft.com/download).
-          See [setup](https://github.com/${GITHUB_REPOSITORY}/blob/main/docs/setup.md) for the per-platform
-          prerequisites (ffmpeg everywhere; xdotool/ImageMagick/Tesseract on Linux; cliclick/Tesseract plus
-          Accessibility and Screen Recording permission on macOS).
-          EOF
-          )
-
-          # Recreated rather than edited: a release is pinned to its tag, so the tag itself
-          # has to move for "latest" to keep meaning latest.
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest out/* \
-            --title "Latest build (main)" \
-            --notes "$notes" \
-            --target "$GITHUB_SHA"
+            Framework-dependent builds: they need the [.NET 10 runtime](https://dotnet.microsoft.com/download).
+            See [setup](https://github.com/${{ github.repository }}/blob/main/docs/setup.md) for the
+            per-platform prerequisites (ffmpeg everywhere; xdotool/ImageMagick/Tesseract on Linux;
+            cliclick/Tesseract plus Accessibility and Screen Recording permission on macOS).
