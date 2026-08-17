@@ -49,30 +49,25 @@ jobs:
 
       # Windows is the only platform that ships every tool, so its bundle is the
       # complete set — the multi-targeted ones publish their Windows TFM here.
+      # One self-contained .exe per tool (PublishSingleFile), so the bundle is a folder of
+      # runnable exes rather than hundreds of loose DLLs.
       - name: Publish downloadable binaries
         run: |
+          $sf = '-p:PublishSingleFile=true', '-p:DebugType=none'
           foreach ($p in @('cnvrtr','audcap','vidcap','outcap','inpctl','scrcap','imgfnd','llmctl','uiactl','stpcap')) {
-            dotnet publish "src/$p/$p.csproj" -c Release -r win-x64 --self-contained false -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -r win-x64 @sf -o "publish/$p"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
           foreach ($p in @('spkbak','txtfnd','waitfr','playbk')) {
-            dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 --self-contained false -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 @sf -o "publish/$p"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
-          # Make the playbk bundle self-contained: co-locate the tools it shells out to.
-          # Never overwrite playbk's own files (matches the `cp -rn` on the other legs).
+          # Co-locate the tools playbk shells out to. These MUST overwrite: playbk's own
+          # publish drops a bare apphost for each ProjectReferenced exe (no .dll beside it,
+          # because single-file bundled playbk's copy inside playbk.exe), so leaving those
+          # in place would ship stubs that exit with "application to execute does not exist".
           foreach ($t in @('inpctl','scrcap','txtfnd','waitfr','uiactl','outcap')) {
-            $src = "publish/$t"
-            if (-not (Test-Path $src)) { continue }
-            $root = (Resolve-Path $src).Path
-            Get-ChildItem $src -Recurse -File | ForEach-Object {
-              $rel = $_.FullName.Substring($root.Length).TrimStart('\')
-              $dest = Join-Path "publish/playbk" $rel
-              if (-not (Test-Path $dest)) {
-                New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-                Copy-Item $_.FullName $dest
-              }
-            }
+            if (Test-Path "publish/$t") { Copy-Item "publish/$t/*" "publish/playbk/" -Recurse -Force }
           }
 
       - name: Upload artifacts
@@ -169,18 +164,25 @@ jobs:
         timeout-minutes: 15
         run: bash scripts/linux-playbk-e2e.sh
 
+      # One self-contained binary per tool (PublishSingleFile), so the bundle is a folder
+      # of runnable executables rather than hundreds of loose DLLs.
       - name: Publish downloadable binaries
         run: |
+          set -euo pipefail
+          SF="-p:PublishSingleFile=true -p:DebugType=none"
           for p in cnvrtr audcap vidcap outcap inpctl scrcap imgfnd llmctl uiactl stpcap; do
-            dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} --self-contained false -o "publish/$p"
+            dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} $SF -o "publish/$p"
           done
-          dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -o publish/spkbak
-          dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/txtfnd
-          dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/waitfr
-          dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/playbk
-          # Make the playbk bundle self-contained: co-locate the tools it shells out to.
+          dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -o publish/spkbak
+          dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/txtfnd
+          dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/waitfr
+          dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/playbk
+          # Co-locate the tools playbk shells out to. These MUST overwrite (no `-n`):
+          # playbk's own publish drops a bare apphost for each ProjectReferenced exe, with
+          # no .dll beside it, so leaving those would ship stubs that fail with
+          # "application to execute does not exist".
           for t in inpctl scrcap txtfnd waitfr uiactl outcap; do
-            [ -d "publish/$t" ] && cp -rn publish/$t/. publish/playbk/ 2>/dev/null || true
+            [ -d "publish/$t" ] && cp -rf publish/$t/. publish/playbk/ || true
           done
 
       - name: Upload artifacts

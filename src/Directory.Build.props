@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      Publishing with a RID otherwise leaves the tool projects self-contained, and playbk
+      (which ProjectReferences outcap/inpctl/uiactl/llmctl to force build order) then fails
+      with NETSDK1151 — "a self-contained executable cannot be referenced by a non
+      self-contained executable". Pinned here rather than passed per-command because a
+      -p: on the command line flows into ProjectReferences and re-creates the mismatch.
+    -->
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+</Project>
