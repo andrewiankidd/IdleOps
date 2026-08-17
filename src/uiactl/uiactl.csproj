@@ -15,4 +15,9 @@
     <ProjectReference Include="..\shared\shared.csproj" />
   </ItemGroup>
 
+  <!-- The Linux AT-SPI backend shells out to this pyatspi helper; ship it beside the binary. -->
+  <ItemGroup>
+    <None Include="atspi_helper.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

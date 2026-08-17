@@ -1,8 +1,10 @@
 # imgfnd — Image Template Matching
 
-> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux · 🟡 macOS (full-screen capture only)  —  🟢 works · 🟡 partial · 🔴 not available
 
 Find a UI element by matching a reference image against a window screenshot. Returns center coordinates.
+
+Matching is **pure managed** (ImageSharp for decoding + a SIMD normalized-cross-correlation, equivalent to OpenCV's `TM_CCOEFF_NORMED`) — no native OpenCV, so it runs identically on Windows, Linux and macOS. Capture uses the shared cross-platform capturer; on macOS that's full-screen only, hence 🟡 there.
 
 ## Usage
 

@@ -35,6 +35,81 @@ internal static class InputSender
     public static bool TypeText(string text, IntPtr hwnd, bool background)
         => background ? TypeTextBackground(text, hwnd) : TypeTextForeground(text);
 
+    // --- Hold / sustained input -----------------------------------------------
+
+    // Foreground hold: SendInput a key-down for each key, keep it held until the
+    // duration elapses (or the token is cancelled), then release. Requires the
+    // target to be focused; the OS keeps the key state pressed while held.
+    public static bool HoldForeground(string keys, double durationSeconds, CancellationToken token)
+    {
+        var codes = ParseHoldKeys(keys);
+        if (codes.Count == 0) return false;
+
+        var down = codes.Select(c => BuildKey(c, 0, IsExtended(c) ? KeyEventFlags.EXTENDEDKEY : 0)).ToList();
+        if (!Send(down)) return false;
+        try
+        {
+            WaitHold(durationSeconds, token);
+        }
+        finally
+        {
+            var up = codes.Select(c => BuildKey(c, 0, KeyEventFlags.KEYUP | (IsExtended(c) ? KeyEventFlags.EXTENDEDKEY : 0))).ToList();
+            Send(up);
+        }
+        return true;
+    }
+
+    // Background hold: re-post WM_KEYDOWN to the target window on an interval (a
+    // single posted key-down is not auto-repeated, so re-posting sustains the
+    // "held" state) until the duration elapses (or cancelled), then post WM_KEYUP.
+    // No focus steal; only works on targets that process their window message queue.
+    public static bool HoldBackground(string keys, IntPtr hwnd, int intervalMs, double durationSeconds, CancellationToken token)
+    {
+        var codes = ParseHoldKeys(keys);
+        if (codes.Count == 0) return false;
+
+        var deadline = durationSeconds > 0 ? DateTime.UtcNow.AddSeconds(durationSeconds) : DateTime.MaxValue;
+        var interval = Math.Max(1, intervalMs);
+        try
+        {
+            while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+            {
+                foreach (var code in codes)
+                {
+                    if (!PostMessage(hwnd, WM_KEYDOWN, code, 0x00000001u)) return false;
+                }
+                Thread.Sleep(interval);
+            }
+        }
+        finally
+        {
+            foreach (var code in codes)
+            {
+                PostMessage(hwnd, WM_KEYUP, code, 0xC0000001u);
+            }
+        }
+        return true;
+    }
+
+    private static List<ushort> ParseHoldKeys(string keys)
+    {
+        var codes = new List<ushort>();
+        foreach (var part in keys.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (TryMapKey(part, out var code)) codes.Add(code);
+        }
+        return codes;
+    }
+
+    private static void WaitHold(double durationSeconds, CancellationToken token)
+    {
+        var deadline = durationSeconds > 0 ? DateTime.UtcNow.AddSeconds(durationSeconds) : DateTime.MaxValue;
+        while (!token.IsCancellationRequested && DateTime.UtcNow < deadline)
+        {
+            Thread.Sleep(20);
+        }
+    }
+
     internal static bool TryMapKeyForTests(string token, out ushort keyCode) => TryMapKey(token, out keyCode);
 
     internal static IReadOnlyList<(ushort code, bool keyUp)> BuildKeySequenceForTests(string tokens) => BuildKeySequence(tokens);
@@ -172,8 +247,10 @@ internal static class InputSender
     }
 
     // Keys that require KEYEVENTF_EXTENDEDKEY for correct SendInput behaviour:
-    // the navigation cluster and Delete (0x21 PageUp .. 0x28 Down, 0x2E Delete).
-    private static bool IsExtended(ushort code) => (code >= 0x21 && code <= 0x28) || code == 0x2E;
+    // the navigation cluster (0x21 PageUp .. 0x28 Down), Insert/Delete (0x2D/0x2E),
+    // and the Windows / Apps keys (0x5B LWin .. 0x5D Apps).
+    private static bool IsExtended(ushort code) =>
+        (code >= 0x21 && code <= 0x28) || code == 0x2D || code == 0x2E || (code >= 0x5B && code <= 0x5D);
 
     public static bool SendMouse(string coords, IntPtr hwnd, MouseButton button, bool moveCursor)
     {
@@ -321,7 +398,12 @@ internal static class InputSender
             "ESC" or "ESCAPE" => 0x1B,
             "SPACE" => 0x20,
             "BACKSPACE" => 0x08,
-            "DELETE" => 0x2E,
+            "DELETE" or "DEL" => 0x2E,
+            "INSERT" or "INS" => 0x2D,
+            "WIN" or "LWIN" or "SUPER" or "META" => 0x5B,
+            "RWIN" => 0x5C,
+            "APPS" or "MENU" or "CONTEXT" => 0x5D,
+            "CAPS" or "CAPSLOCK" => 0x14,
             "LEFT" => 0x25,
             "UP" => 0x26,
             "RIGHT" => 0x27,
@@ -337,7 +419,13 @@ internal static class InputSender
         };
 
         if (keyCode != 0) return true;
-        if (token.Length == 1) { keyCode = VkKeyScan(token[0]); return keyCode != 0xFFFF; }
+        if (token.Length == 1)
+        {
+            var scan = VkKeyScan(token[0]);
+            if (scan == 0xFFFF) return false;
+            keyCode = (ushort)(scan & 0xFF);   // virtual-key only; drop the shift-state high byte
+            return true;
+        }
         return false;
     }
 

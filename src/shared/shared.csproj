@@ -10,4 +10,8 @@
     <PackageReference Include="System.Drawing.Common" Version="9.0.5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="shared.Tests" />
+  </ItemGroup>
+
 </Project>

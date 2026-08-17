@@ -1,38 +1,45 @@
 using System.Diagnostics;
-using System.Drawing.Imaging;
 using System.Runtime.Versioning;
 using IdleOps.Shared.Capture;
 using IdleOps.Shared.Logging;
+using IdleOps.Shared.Ocr;
 using IdleOps.Shared.Platform;
-using IdleOps.Shared.Windows;
-using IdleOps.Shared.Win;
+using IdleOps.Shared.Windowing;
 using playbk.Model;
 using vidcap.Services;
 using audcap.Services;
 using System.Text.RegularExpressions;
+#if WINDOWS
 using Microsoft.Win32;
+using IdleOps.Shared.Win;
+#endif
 using YamlDotNet.Serialization;
 using YamlDotNet.Serialization.NamingConventions;
 
 namespace playbk.Execution;
 
-public sealed class ScriptRunner : IDisposable
+internal sealed class ScriptRunner : IDisposable
 {
     private readonly string _baseDir;
     private readonly string _outputDir;
     private readonly int _captureTimerSeconds;
+    private readonly DeviceProfile _profile;
     private readonly Dictionary<string, int> _stepPids = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Process> _stepProcesses = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<Task> _backgroundTasks = [];
     // Warm OCR text finder, created on first click-text/assert-text and reused so
-    // the OCR engine initializes once per run instead of once per step.
-    private WindowTextFinder? _textFinder;
+    // the OCR engine initializes once per run instead of once per step. Cross-platform:
+    // WinRT OCR on Windows, Tesseract elsewhere (both via the shared ImageTextFinder).
+    private ImageTextFinder? _textFinder;
+    private readonly IScreenCapturer? _capturer = ScreenCapturerFactory.Create();
+    private readonly IWindowLocator? _locator = WindowLocatorFactory.Create();
 
-    public ScriptRunner(string baseDir, string outputDir, int captureTimerSeconds = 10)
+    public ScriptRunner(string baseDir, string outputDir, int captureTimerSeconds = 10, DeviceProfile? profile = null)
     {
         _baseDir = baseDir;
         _outputDir = outputDir;
         _captureTimerSeconds = captureTimerSeconds;
+        _profile = profile ?? DeviceProfile.Local;
     }
 
     public void Dispose()
@@ -62,6 +69,15 @@ public sealed class ScriptRunner : IDisposable
     {
         var script = LoadScript(scriptPath);
         var scriptName = Path.GetFileNameWithoutExtension(scriptPath);
+
+        // Pre-flight: reject action/profile mismatches before any step runs, so a
+        // bad combination fails loudly and completely rather than mid-run.
+        var violations = RunbookValidator.Validate(script, _profile);
+        if (violations.Count > 0)
+        {
+            ConsoleLogger.Error(RunbookValidator.Format(violations, _profile));
+            return 1;
+        }
 
         Directory.CreateDirectory(_outputDir);
 
@@ -276,7 +292,7 @@ public sealed class ScriptRunner : IDisposable
         while (DateTime.UtcNow < deadline)
         {
             token.ThrowIfCancellationRequested();
-            if (WindowMatcher.FindWindow(pattern) is not null)
+            if (_locator is not null && _locator.Exists(pattern))
             {
                 ConsoleLogger.Info($"  Window '{pattern}' found.");
                 return true;
@@ -429,7 +445,6 @@ public sealed class ScriptRunner : IDisposable
         }
     }
 
-    [SupportedOSPlatform("windows")]
     private bool RunScreenshot(Step step)
     {
         var pattern = step.Window;
@@ -449,10 +464,9 @@ public sealed class ScriptRunner : IDisposable
         outputPath = Path.IsPathRooted(outputPath) ? outputPath : Path.Combine(_outputDir, outputPath);
         outputPath = Path.GetFullPath(outputPath);
 
-        var match = WindowMatcher.FindWindow(pattern, preferNewest: true);
-        if (match is null)
+        if (_capturer is null)
         {
-            ConsoleLogger.Warn($"screenshot: window '{pattern}' not found.");
+            ConsoleLogger.Warn("screenshot: no screen capturer for this OS.");
             return false;
         }
 
@@ -462,39 +476,37 @@ public sealed class ScriptRunner : IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        try
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var outcome = _capturer.Capture(pattern, outputPath);
+        if (!outcome.Ok)
         {
-            var sw = System.Diagnostics.Stopwatch.StartNew();
-            using var bitmap = WindowCapture.CaptureWindow(match.Handle);
-            var ext = Path.GetExtension(outputPath).ToLowerInvariant();
-            var format = ext switch
-            {
-                ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-                ".bmp" => ImageFormat.Bmp,
-                _ => ImageFormat.Png
-            };
-            bitmap.Save(outputPath, format);
-            ConsoleLogger.Info($"  Screenshot saved: {outputPath} ({bitmap.Width}x{bitmap.Height}, {sw.ElapsedMilliseconds}ms)");
-            return true;
-        }
-        catch (Exception ex)
-        {
-            ConsoleLogger.Warn($"screenshot: capture failed for window '{pattern}': {ex.Message}");
+            ConsoleLogger.Warn($"screenshot: capture failed for window '{pattern}'.");
             return false;
         }
+
+        ConsoleLogger.Info($"  Screenshot saved: {outputPath} ({outcome.Width}x{outcome.Height}, {sw.ElapsedMilliseconds}ms)");
+        return true;
     }
 
-    // Single-shot OCR: locate `text` in `window` in-process (shared.win
-    // WindowTextFinder, which reuses one warm OCR engine across steps), returning
+    // WinRT OCR on Windows (zero-install, warm engine); Tesseract elsewhere.
+    private static ITextRecognizer CreateRecognizer() =>
+#if WINDOWS
+        new WinRtTextRecognizer();
+#else
+        new TesseractTextRecognizer();
+#endif
+
+    // Single-shot OCR: locate `text` in `window` via the shared ImageTextFinder,
+    // which reuses one warm OCR engine across steps (WinRT on Windows), returning
     // the window-relative "x,y" click coordinates on success, or null if not found /
     // on error (logged under `action` for context). Shared by click-text (find →
     // click) and assert-text (find → pass/fail). NOTE: wait-window's `text:` path
     // deliberately uses waitfr (which polls), not this single-shot path.
     private async Task<string?> FindTextViaOcrAsync(string window, string text, string action)
     {
-        if (!OperatingSystem.IsWindows())
+        if (_capturer is null)
         {
-            ConsoleLogger.Warn($"{action}: OCR is Windows-only.");
+            ConsoleLogger.Warn($"{action}: OCR unavailable (no screen capturer for this OS).");
             return null;
         }
 
@@ -503,7 +515,7 @@ public sealed class ScriptRunner : IDisposable
 
         try
         {
-            _textFinder ??= new WindowTextFinder();
+            _textFinder ??= new ImageTextFinder(_capturer, CreateRecognizer());
             var coords = await _textFinder.FindAsync(window, text);
             if (coords is null)
             {
@@ -686,6 +698,72 @@ public sealed class ScriptRunner : IDisposable
         }
     }
 
+    // Send a key chord / sequence into a window via inpctl (e.g. "CTRL+S",
+    // "ALT+F4", "CTRL+A, DELETE"). The first-class equivalent of
+    // `exec inpctl --keyboard`. Keys come from text: (or args:).
+    private async Task<bool> RunKeyboardAsync(Step step, CancellationToken token)
+    {
+        var pattern = step.Window;
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            ConsoleLogger.Warn("keyboard: no window pattern specified.");
+            return false;
+        }
+
+        var keys = step.Text ?? step.Args;
+        if (string.IsNullOrWhiteSpace(keys))
+        {
+            ConsoleLogger.Warn("keyboard: no key(s) specified (use text: e.g. \"CTRL+S\").");
+            return false;
+        }
+
+        var inpctlPath = ResolveExecutable("inpctl") ?? ResolveExecutable("inpctl.exe");
+        if (inpctlPath is null)
+        {
+            ConsoleLogger.Warn("keyboard: inpctl not found on PATH. Ensure playbk is built with solution.");
+            return false;
+        }
+
+        var backgroundArg = step.Background ? " --background" : string.Empty;
+        var psi = new ProcessStartInfo
+        {
+            FileName = inpctlPath,
+            Arguments = $"--window \"{pattern}\" --keyboard \"{keys}\"{backgroundArg}",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null)
+            {
+                ConsoleLogger.Warn("keyboard: failed to start inpctl process.");
+                return false;
+            }
+
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+
+            if (process.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"keyboard: inpctl failed (exit {process.ExitCode}). stderr: {stderr.Trim()}");
+                return false;
+            }
+
+            ConsoleLogger.Info($"  Sent keys '{keys}' to '{pattern}'.");
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"keyboard: inpctl failed: {ex.Message}");
+            return false;
+        }
+    }
+
     // --- UI Automation actions (element-level automation via uiactl) ----------
     // Resolve "--window ... <selector>" from the step. One selector: automation_id
     // wins, then element (accessibility Name), then control_type.
@@ -804,6 +882,75 @@ public sealed class ScriptRunner : IDisposable
         }
     }
 
+    // Hold key(s) down for a fixed duration via inpctl (text = the key(s)). A
+    // runbook step must terminate, so a positive duration is required; use the
+    // inpctl CLI directly for an indefinite (Ctrl+C) hold.
+    private async Task<bool> RunHoldAsync(Step step, CancellationToken token)
+    {
+        var pattern = step.Window;
+        if (string.IsNullOrWhiteSpace(pattern))
+        {
+            ConsoleLogger.Warn("hold: no window pattern specified.");
+            return false;
+        }
+
+        var keys = step.Text;
+        if (string.IsNullOrWhiteSpace(keys))
+        {
+            ConsoleLogger.Warn("hold: no key(s) specified (use text:).");
+            return false;
+        }
+
+        var duration = step.Duration ?? 0;
+        if (duration <= 0)
+        {
+            ConsoleLogger.Warn("hold: a positive duration is required in a runbook (use the inpctl CLI for an indefinite hold).");
+            return false;
+        }
+
+        var inpctlPath = ResolveExecutable("inpctl") ?? ResolveExecutable("inpctl.exe");
+        if (inpctlPath is null)
+        {
+            ConsoleLogger.Warn("hold: inpctl not found on PATH. Ensure playbk is built with solution.");
+            return false;
+        }
+
+        var args = $"--window \"{pattern}\" --hold \"{keys}\" --duration {duration.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
+        if (!string.IsNullOrWhiteSpace(step.Method)) args += $" --method {step.Method}";
+        if (step.Interval is int interval) args += $" --interval {interval}";
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = inpctlPath,
+            Arguments = args,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            WorkingDirectory = _outputDir
+        };
+
+        try
+        {
+            using var process = Process.Start(psi);
+            if (process is null) { ConsoleLogger.Warn("hold: failed to start inpctl process."); return false; }
+            var stderr = await process.StandardError.ReadToEndAsync(token);
+            await process.WaitForExitAsync(token);
+            if (process.ExitCode != 0)
+            {
+                ConsoleLogger.Warn($"hold: inpctl failed (exit {process.ExitCode}). stderr: {stderr.Trim()}");
+                return false;
+            }
+            ConsoleLogger.Info($"  Held '{keys}' on '{pattern}' for {duration:0.#}s.");
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            ConsoleLogger.Warn($"hold: inpctl failed: {ex.Message}");
+            return false;
+        }
+    }
+
     private async Task<bool> RunStepsAsync(Script script, string scriptName, CancellationToken token, string scriptPath)
     {
         foreach (var step in script.Steps)
@@ -876,7 +1023,7 @@ public sealed class ScriptRunner : IDisposable
                 return await RunSleepAsync(step, token);
             case "wait-window":
                 return await RunWaitWindowAsync(step, token);
-            case "screenshot" when OperatingSystem.IsWindows():
+            case "screenshot":
                 return RunScreenshot(step);
             case "click-text":
                 return await RunClickTextAsync(step, token);
@@ -884,6 +1031,8 @@ public sealed class ScriptRunner : IDisposable
                 return await RunAssertTextAsync(step, token);
             case "type":
                 return await RunTypeAsync(step, token);
+            case "keyboard" or "keys" or "chord":
+                return await RunKeyboardAsync(step, token);
             case "speak":
                 return await RunSpeakAsync(step, token);
             case "set-value":
@@ -900,6 +1049,8 @@ public sealed class ScriptRunner : IDisposable
                 return await RunUiaVerbAsync(step, "--select", null, "select", token);
             case "assert-value":
                 return await RunAssertValueAsync(step, token);
+            case "hold":
+                return await RunHoldAsync(step, token);
             default:
                 ConsoleLogger.Warn($"Unknown action '{step.Action}' in '{scriptPath}'.");
                 return false;
@@ -979,6 +1130,7 @@ public sealed class ScriptRunner : IDisposable
             }
         }
 
+#if WINDOWS
         if (OperatingSystem.IsWindows())
         {
             foreach (var name in candidateNames)
@@ -990,10 +1142,13 @@ public sealed class ScriptRunner : IDisposable
                 }
             }
         }
+#endif
 
         return null;
     }
 
+#if WINDOWS
+    // Windows "App Paths" registry lookup (a fallback for apps not on PATH).
     [SupportedOSPlatform("windows")]
     private static string? TryResolveFromAppPaths(string exeName)
     {
@@ -1017,6 +1172,7 @@ public sealed class ScriptRunner : IDisposable
 
         return null;
     }
+#endif
 
     internal static List<string> Tokenize(string command)
     {

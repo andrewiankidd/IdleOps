@@ -1,6 +1,9 @@
 # txtfnd — OCR Text Finder
 
-> **Platform:** 🟢 Windows · 🔴 Linux · 🔴 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows (WinRT OCR) · 🟢 Linux (Tesseract) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+>
+> **Linux:** needs `tesseract-ocr` (`apt install tesseract-ocr`); capture via ImageMagick/X11.
+> **macOS:** needs `brew install tesseract`; capture is full-screen only (see scrcap), so per-window OCR is degraded.
 
 Find text on screen and return its coordinates, enabling "find and click" automation.
 

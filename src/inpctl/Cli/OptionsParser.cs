@@ -22,6 +22,18 @@ internal static class OptionsParser
             })
             .On("--resize", v => opts = opts with { Resize = v })
             .On("--move", v => opts = opts with { Move = v })
+            .On("--hold", v => opts = opts with { Hold = v })
+            .On("--interval", v =>
+            {
+                if (!int.TryParse(v, out var ms)) throw new ArgumentException("Invalid interval.");
+                opts = opts with { Interval = ms };
+            })
+            .On("--duration", v =>
+            {
+                if (!double.TryParse(v, out var seconds)) throw new ArgumentException("Invalid duration.");
+                opts = opts with { Duration = seconds };
+            })
+            .On("--method", v => opts = opts with { Method = ParseMethod(v) })
             .Flag("--ctrlc", () => opts = opts with { SendCtrlC = true })
             .Flag("--move-cursor", () => opts = opts with { MoveCursor = true })
             .Flag("--background", () => opts = opts with { Background = true })
@@ -33,4 +45,11 @@ internal static class OptionsParser
 
         return opts;
     }
+
+    internal static InputMethod ParseMethod(string value) => value.ToLowerInvariant() switch
+    {
+        "foreground" or "fg" => InputMethod.Foreground,
+        "background" or "bg" => InputMethod.Background,
+        _ => throw new ArgumentException($"Invalid --method '{value}' (use foreground|background)."),
+    };
 }

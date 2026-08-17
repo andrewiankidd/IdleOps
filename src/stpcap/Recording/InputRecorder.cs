@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using System.Text;
 using System.Text.RegularExpressions;
 using IdleOps.Shared.Windows;
@@ -7,6 +8,7 @@ using IdleOps.Shared.Windows.Uia;
 
 namespace stpcap.Recording;
 
+[SupportedOSPlatform("windows")]
 internal sealed class InputRecorder : IDisposable
 {
     private readonly string? _windowFilter;

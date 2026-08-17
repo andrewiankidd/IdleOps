@@ -1,6 +1,9 @@
 # inpctl — Input Control (Windows Only)
 
-> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+>
+> **Linux (X11):** needs `xdotool` on PATH (`wmctrl` optional, for maximize/restore). Input uses XTEST (foreground, reliable). `--background`/`--method background` is **best-effort** — it uses X `XSendEvent`, which many apps (xterm, browsers) ignore for security; there is no true no-focus-steal equivalent to Windows' PostMessage. **Wayland is not supported** (xdotool needs X11 or XWayland-hosted windows; Wayland has no global window addressing).
+> **macOS:** backend written (UNVERIFIED) — `cliclick` for mouse/keyboard (`brew install cliclick`), `osascript`/System Events for window focus/move/resize. Needs Accessibility permission; not yet validated on real hardware.
 
 Send keyboard and mouse input to windows by title. Supports wildcard matching, key chords, text typing, and mouse clicks/drags.
 
@@ -27,7 +30,20 @@ dotnet run --project src/inpctl -- --window "Paint*" --leftmouse "30%,50%-70%,50
 
 # send Ctrl+C to a process by PID
 dotnet run --project src/inpctl -- --pid 12345 --ctrlc
+
+# hold a key down for 10 seconds (foreground; window must be focused)
+dotnet run --project src/inpctl -- --window "My App*" --hold "W,SHIFT" --duration 10
+
+# hold F in a background game — e.g. keep an action going in Palworld while you
+# work in another window. Unreal games process posted key messages, so a held key
+# registers even while unfocused (works until the duration elapses, or Ctrl+C):
+dotnet run --project src/inpctl -- --window "Palworld*" --hold "F" --method background --duration 3600
 ```
+
+> `method: background` only works on targets that process their window message
+> queue (Unreal games do; RawInput/DirectInput-only games don't — use `foreground`
+> for those, which requires focus). Automating input on official multiplayer is
+> anti-cheat territory — keep it to singleplayer / private servers.
 
 ## Options
 
@@ -36,6 +52,11 @@ dotnet run --project src/inpctl -- --pid 12345 --ctrlc
 | `-w, --window <pattern>` | Target window by title (supports `*` wildcards) |
 | `--keyboard <keys>` | Send key sequence (comma-separated, e.g., `CTRL+C,ALT+TAB`) |
 | `--type <text>` | Type literal text (handles shifted characters automatically) |
+| `--background` | Post `--type`/`--keyboard` without foregrounding (no focus steal; classic Win32 only) |
+| `--hold <keys>` | Hold key(s) down (comma-separated), e.g. `F` or `W,SHIFT` |
+| `--duration <s>` | How long to hold; `0` or omitted = until Ctrl+C |
+| `--method <name>` | Hold delivery: `foreground` (SendInput, needs focus) or `background` (post to window) |
+| `--interval <ms>` | Re-post interval for `--method background` (default 30) |
 | `--leftmouse <coords>` | Left-click at coordinates |
 | `--rightmouse <coords>` | Right-click at coordinates |
 | `--middlemouse <coords>` | Middle-click at coordinates |

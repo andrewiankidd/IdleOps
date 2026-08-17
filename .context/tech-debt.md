@@ -8,9 +8,38 @@
 - inpctl tests only cover window matching and key mapping, not actual input sending
 - waitfr, imgfnd, spkbak test projects exist but have no tests yet (require live desktop / hardware)
 
-## No CI/CD pipeline
+## Cross-platform (Linux) — known debt & un-closable gaps
 
-No GitHub Actions, Azure Pipelines, or other CI configuration exists. Tests must be run manually.
+The whole toolkit runs on Linux (X11). Status of the known items:
+
+- ~~**Window-find was triplicated**~~ — **RESOLVED**: `inpctl`, `scrcap` and the window
+  locator now share one X11 search (`IdleOps.Shared.Windowing.LinuxX11Windows.SearchId`);
+  `IWindowLocator.Resolve` exposes the raw handle. Verified behind the Linux e2e scripts.
+- ~~**playbk not self-contained on a Linux bundle**~~ — **RESOLVED**: copy-targets pick the
+  right sibling TFM per build, and the CI publish co-locates the sibling tools into
+  `publish/playbk` so the downloaded bundle is self-contained.
+- **stpcap records coordinates, not semantic steps on Linux** — *deliberately deferred.*
+  The Windows recorder uses UIA element-at to emit resilient `invoke`/`click-text` steps.
+  Doing the same on Linux means resolving AT-SPI element-at per click, which needs the
+  accessibility bus running *during recording*, couples stpcap to uiactl's helper (or a
+  move-the-helper-into-shared refactor), adds per-click latency, and AT-SPI element-at is
+  flaky. Poor effort/value/risk for a niche gain when coordinates already work — revisit
+  only if resilient Linux recordings become a real need.
+
+**Can't be closed on X11 (documented per tool, not debt to pay down):**
+
+- **inpctl `--background` is best-effort** — X `XSendEvent` is ignored by many apps for
+  security; there is no true no-focus-steal equivalent to Windows PostMessage.
+- **Wayland is unsupported** — xdotool/XTEST need X11; Wayland has no global window
+  addressing. Would require a Wayland-native approach (compositor protocols).
+- **macOS backends** are stubs (input, per-window capture, AT-SPI/AX) — the next frontier,
+  needs a Mac to build against.
+
+## CI
+
+`.github/workflows/build.yml` builds+tests the full solution on Windows and the
+cross-platform tools on ubuntu + macOS, with Linux e2e scripts (`scripts/linux-*.sh`)
+running the tools under Xvfb. No GitLab pipeline yet.
 
 ## playbk `wait-window` silently ignores `text:` field
 

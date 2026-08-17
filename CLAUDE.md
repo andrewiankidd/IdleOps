@@ -53,12 +53,12 @@ Eight CLI tools built around a shared library. Each tool is a standalone executa
 | audcap | CLI executable | Cross-platform system audio capture (WASAPI on Windows, ffmpeg on macOS/Linux) | [src/audcap/CLAUDE.md](src/audcap/CLAUDE.md) |
 | vidcap | CLI executable | Cross-platform screen/window video capture via ffmpeg | [src/vidcap/CLAUDE.md](src/vidcap/CLAUDE.md) |
 | outcap | CLI executable | Orchestrates audcap + vidcap in parallel, merges with ffmpeg | [src/outcap/CLAUDE.md](src/outcap/CLAUDE.md) |
-| playbk | CLI executable (net10.0-windows) | YAML script engine — runs steps, manages processes, records output. Calls OCR/UIA/input **in-process** (thin shells over shared) | [src/playbk/CLAUDE.md](src/playbk/CLAUDE.md) |
+| playbk | CLI executable (net10.0-windows;net10.0) | YAML script engine — runs steps, manages processes, records output. Multi-targeted: Windows links WinRT OCR in-process; Linux uses the shared Tesseract/xdotool/capture backends | [src/playbk/CLAUDE.md](src/playbk/CLAUDE.md) |
 | inpctl | CLI executable | Windows-only keyboard/mouse input via P/Invoke (SendInput, PostMessage for background) | [src/inpctl/CLAUDE.md](src/inpctl/CLAUDE.md) |
 | uiactl | CLI executable | Windows-only element automation via UI Automation (thin CLI over `shared`) | [src/uiactl/CLAUDE.md](src/uiactl/CLAUDE.md) |
 | txtfnd | CLI executable | Windows-only OCR text finder — thin CLI over `shared.win` | [src/txtfnd/CLAUDE.md](src/txtfnd/CLAUDE.md) |
 | scrcap | CLI executable | Windows-only screenshot capture — saves a window to PNG/JPEG/BMP | [src/scrcap/CLAUDE.md](src/scrcap/CLAUDE.md) |
-| stpcap | CLI executable | Windows-only input recorder — emits semantic steps (UIA → OCR → coords) | — |
+| stpcap | CLI executable | Input recorder → YAML (Windows low-level hooks / Linux XRecord via python-xlib); emits semantic steps (UIA → OCR → coords on Windows, coords/type on Linux) | — |
 
 ### Dependency Graph
 
@@ -75,9 +75,11 @@ playbk ──► outcap ──► audcap ──► shared
 ```
 
 `shared` stays net10.0 (cross-platform for audcap/vidcap); `shared.win` is net10.0-windows
-(WinRT OCR). playbk is net10.0-windows so it can link OCR/UIA in-process rather than
-shelling out. Its `.csproj` still copies outcap/inpctl/uiactl/txtfnd/scrcap binaries into
-its output so `exec` steps and the CLIs remain available on PATH.
+(WinRT OCR). playbk multi-targets `net10.0-windows;net10.0`: the Windows TFM links WinRT
+OCR in-process (warm engine) via shared.win; the net10.0 TFM uses the shared cross-platform
+backends (`ImageTextFinder`+Tesseract, `IScreenCapturer`, `IWindowLocator`) so it runs on
+Linux too. Its `.csproj` still copies outcap/inpctl/uiactl/txtfnd/scrcap binaries into its
+output so `exec` steps and the CLIs remain available on PATH.
 
 ### Key Patterns
 

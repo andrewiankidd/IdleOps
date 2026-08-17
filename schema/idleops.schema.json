@@ -54,7 +54,8 @@
             "toggle",
             "expand",
             "collapse",
-            "select"
+            "select",
+            "hold"
           ],
           "enumDescriptions": [
             "Run a command. `args` is the command line; `wait` controls fire-and-forget vs block-until-exit.",
@@ -71,7 +72,8 @@
             "UIA: toggle the selected checkbox / toggle button (uiactl).",
             "UIA: expand the selected menu / combo / tree item (uiactl).",
             "UIA: collapse the selected menu / combo / tree item (uiactl).",
-            "UIA: select the selected list item / tab / radio (uiactl)."
+            "UIA: select the selected list item / tab / radio (uiactl).",
+            "Hold `text` key(s) down on `window` for `duration` seconds (inpctl). method: foreground|background."
           ]
         },
         "args": {
@@ -135,6 +137,21 @@
         "control_type": {
           "type": "string",
           "description": "UIA actions: select the target element by control type (e.g. Edit, Button, Document, or a numeric UIA id)."
+        },
+        "duration": {
+          "type": "number",
+          "minimum": 0,
+          "description": "hold: seconds to hold the key(s) down (must be > 0 in a runbook)."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["foreground", "background"],
+          "description": "hold: delivery method. foreground = SendInput (needs focus); background = post to the window (target must process its message queue)."
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "hold: ms between re-posts for the background method (default 30)."
         }
       },
       "allOf": [
@@ -186,6 +203,10 @@
             "required": ["window"],
             "anyOf": [{ "required": ["automation_id"] }, { "required": ["element"] }, { "required": ["control_type"] }]
           }
+        },
+        {
+          "if": { "properties": { "action": { "const": "hold" } }, "required": ["action"] },
+          "then": { "required": ["window", "text", "duration"] }
         }
       ]
     }

@@ -55,21 +55,21 @@ public class WindowMatcherTests
         Assert.Matches(regex, "");
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public void GetWindowTitle_NullHandle_ReturnsEmpty()
     {
         var title = WindowMatcher.GetWindowTitle(IntPtr.Zero);
         Assert.Equal(string.Empty, title);
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public void FindWindow_NonexistentPattern_ReturnsNull()
     {
         var result = WindowMatcher.FindWindow("ZZZZZ_NonexistentWindow_12345_ZZZZZ");
         Assert.Null(result);
     }
 
-    [Fact]
+    [WindowsOnlyFact]
     public void FindAllWindows_NonexistentPattern_ReturnsEmpty()
     {
         var results = WindowMatcher.FindAllWindows("ZZZZZ_NonexistentWindow_12345_ZZZZZ");

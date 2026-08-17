@@ -1,12 +1,5 @@
 using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-using System.Text;
-using IdleOps.Shared.Logging;
-using IdleOps.Shared.Platform;
-using IdleOps.Shared.Windows;
 using stpcap.Recording;
-
-[assembly: SupportedOSPlatform("windows")]
 
 namespace stpcap;
 
@@ -58,9 +51,14 @@ internal static class Program
             return 0;
         }
 
-        if (!PlatformSupport.EnsureWindows("stpcap")) return 1;
+        var recorder = InputRecorderFactory.Create(windowFilter);
+        if (recorder is null)
+        {
+            Console.Error.WriteLine("[stpcap] no input recorder for this OS (supported: Windows hooks, Linux/X11 XRecord).");
+            return 1;
+        }
 
-        Console.WriteLine($"[stpcap] Recording input to '{output}'...");
+        Console.WriteLine($"[stpcap] Recording input to '{output}' ({recorder.Name})...");
         Console.WriteLine("[stpcap] Press Ctrl+C to stop and save.");
         if (windowFilter is not null)
         {
@@ -68,34 +66,14 @@ internal static class Program
         }
 
         using var cts = new CancellationTokenSource();
-        Console.CancelKeyPress += (_, e) =>
-        {
-            e.Cancel = true;
-            cts.Cancel();
-        };
+        // PosixSignalRegistration fires for Ctrl+C AND `kill` on both Windows and
+        // Linux (Console.CancelKeyPress misses SIGINT sent to a no-TTY process).
+        using var sigint = PosixSignalRegistration.Create(PosixSignal.SIGINT, ctx => { ctx.Cancel = true; cts.Cancel(); });
+        using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, ctx => { ctx.Cancel = true; cts.Cancel(); });
 
-        var recorder = new InputRecorder(windowFilter);
-        recorder.Start();
-
-        try
+        using (recorder)
         {
-            // Message pump — REQUIRED for low-level hooks (WH_MOUSE_LL / WH_KEYBOARD_LL):
-            // the OS delivers their callbacks via this thread's message queue, so the
-            // thread must retrieve messages or the hooks never fire. PeekMessage keeps
-            // the loop responsive to Ctrl+C (a plain GetMessage would block indefinitely).
-            while (!cts.IsCancellationRequested)
-            {
-                while (PeekMessage(out var msg, IntPtr.Zero, 0, 0, PM_REMOVE))
-                {
-                    TranslateMessage(ref msg);
-                    DispatchMessage(ref msg);
-                }
-                Thread.Sleep(10);
-            }
-        }
-        finally
-        {
-            recorder.Stop();
+            recorder.RunUntil(cts.Token);
         }
 
         var events = recorder.Events;
@@ -112,28 +90,4 @@ internal static class Program
         Console.WriteLine($"[stpcap] Saved to '{output}'.");
         return 0;
     }
-
-    // Message-pump P/Invoke — required so low-level hooks fire on this thread.
-    private const uint PM_REMOVE = 0x0001;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct MSG
-    {
-        public IntPtr Hwnd;
-        public uint Message;
-        public IntPtr WParam;
-        public IntPtr LParam;
-        public uint Time;
-        public int PtX;
-        public int PtY;
-    }
-
-    [DllImport("user32.dll")]
-    private static extern bool PeekMessage(out MSG msg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
-
-    [DllImport("user32.dll")]
-    private static extern bool TranslateMessage(ref MSG msg);
-
-    [DllImport("user32.dll")]
-    private static extern IntPtr DispatchMessage(ref MSG msg);
 }

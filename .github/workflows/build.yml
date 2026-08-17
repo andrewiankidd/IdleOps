@@ -32,7 +32,7 @@ jobs:
           dotnet test IdleOps.sln `
             --configuration Release `
             --no-build `
-            --filter "FullyQualifiedName!~RecordingTests&FullyQualifiedName!~PlaybkTests.PlaybkTests" `
+            --filter "FullyQualifiedName!~RecordingTests&FullyQualifiedName!~PlaybkTests.PlaybkTests&FullyQualifiedName!~IntegrationTests" `
             --logger "console;verbosity=normal"
 
       - name: Smoke test — run .idleops.yaml via playbk
@@ -41,10 +41,11 @@ jobs:
             -i src/playbk/inputs/smoke-test.idleops.yaml `
             -o ./smoke-outputs
 
-  # Linux/macOS build, test and publish ONLY the cross-platform tools. Most tools
-  # are Windows-only (Win32/COM/WinRT) — those are either stubbed at runtime or use
-  # a Windows-only TFM, so they are deliberately excluded here. See the support
-  # matrix in README.md.
+  # Linux/macOS build, test and publish the cross-platform tools. Input (inpctl),
+  # screen capture (scrcap), image matching (imgfnd) and the AI layer (llmctl) now
+  # run here via platform backends (xdotool/import on Linux) alongside the media
+  # tools. The remaining Windows-only tools (uiactl/txtfnd/waitfr/stpcap/playbk) use
+  # Win32/COM/WinRT or a Windows-only TFM and stay excluded. See README.md matrix.
   crossplatform:
     name: Cross-platform (${{ matrix.os }})
     strategy:
@@ -64,25 +65,69 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      # spkbak is multi-targeted; off Windows only its net10.0 TFM can build.
+      # spkbak and txtfnd are multi-targeted; off Windows only their net10.0 TFM can
+      # build. txtfnd references the Windows-only shared.win for its Windows TFM, so
+      # EnableWindowsTargeting lets the net10.0 build resolve the graph without
+      # building shared.win.
       - name: Build cross-platform tools
         run: |
-          for p in cnvrtr audcap vidcap outcap; do
+          for p in cnvrtr audcap vidcap outcap inpctl scrcap imgfnd llmctl uiactl stpcap; do
             dotnet build "src/$p/$p.csproj" -c Release
           done
           dotnet build src/spkbak/spkbak.csproj -c Release -f net10.0
+          dotnet build src/txtfnd/txtfnd.csproj -c Release -f net10.0 -p:EnableWindowsTargeting=true
+          dotnet build src/waitfr/waitfr.csproj -c Release -f net10.0 -p:EnableWindowsTargeting=true
+          dotnet build src/playbk/playbk.csproj -c Release -f net10.0 -p:EnableWindowsTargeting=true
 
       - name: Test (cross-platform, excluding hardware-dependent)
         run: |
-          dotnet test src/cnvrtr.Tests/cnvrtr.Tests.csproj -c Release
-          dotnet test src/spkbak.Tests/spkbak.Tests.csproj -c Release
+          for t in cnvrtr spkbak inpctl scrcap imgfnd llmctl uiactl stpcap shared; do
+            dotnet test "src/$t.Tests/$t.Tests.csproj" -c Release \
+              --filter "FullyQualifiedName!~IntegrationTests"
+          done
+
+      # Real X11 smoke test on Linux: drive an xterm with inpctl, capture with scrcap,
+      # OCR-locate text with txtfnd — all under a headless Xvfb. macOS has no X11.
+      - name: Linux X11 end-to-end (inpctl + scrcap + txtfnd)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xdotool imagemagick xvfb openbox xterm wmctrl tesseract-ocr
+          bash scripts/linux-e2e.sh
+
+      # AT-SPI accessibility e2e for uiactl (drives gnome-calculator). Self-skips if
+      # the a11y stack is unavailable. Linux only.
+      - name: Linux AT-SPI end-to-end (uiactl)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y -qq at-spi2-core python3-pyatspi dbus-x11 gnome-calculator
+          bash scripts/linux-uiactl-e2e.sh
+
+      # XRecord input-recording e2e for stpcap. Linux only; self-skips without python3-xlib.
+      - name: Linux XRecord end-to-end (stpcap)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y -qq python3-xlib
+          bash scripts/linux-stpcap-e2e.sh
+
+      # Full-stack e2e: the playbk orchestrator running a real playbook on Linux.
+      - name: Linux end-to-end (playbk orchestrator)
+        if: matrix.os == 'ubuntu-latest'
+        run: bash scripts/linux-playbk-e2e.sh
 
       - name: Publish downloadable binaries
         run: |
-          for p in cnvrtr audcap vidcap outcap; do
+          for p in cnvrtr audcap vidcap outcap inpctl scrcap imgfnd llmctl uiactl stpcap; do
             dotnet publish "src/$p/$p.csproj" -c Release -r ${{ matrix.rid }} --self-contained false -o "publish/$p"
           done
           dotnet publish src/spkbak/spkbak.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -o publish/spkbak
+          dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/txtfnd
+          dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/waitfr
+          dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} --self-contained false -p:EnableWindowsTargeting=true -o publish/playbk
+          # Make the playbk bundle self-contained: co-locate the tools it shells out to.
+          for t in inpctl scrcap txtfnd waitfr uiactl outcap; do
+            [ -d "publish/$t" ] && cp -rn publish/$t/. publish/playbk/ 2>/dev/null || true
+          done
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

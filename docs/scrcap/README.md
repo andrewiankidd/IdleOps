@@ -1,6 +1,9 @@
 # scrcap — Screenshot Capture
 
-> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+>
+> **Linux (X11):** needs ImageMagick (`import`) on PATH; window id resolved via `xdotool`. Use `--window screen` for the whole display. Wayland windows are reachable only via XWayland.
+> **macOS:** `screencapture` — whole-display via `-x`; per-window now captures the window's region (`-R`) using bounds from `osascript`/System Events. UNVERIFIED (written without a Mac); needs Accessibility permission for the bounds lookup.
 
 Capture a window screenshot and save to file.
 

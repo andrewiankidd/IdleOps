@@ -14,10 +14,16 @@ internal static class OptionsParser
         var outputDir = "outputs";
         var showHelp = false;
         var showVersion = false;
+        string? goal = null;
+        var dryRun = false;
+        var profile = "local";
 
         new ArgParser(args)
             .On("-i", "--input", v => patterns.AddRange(v.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
             .On("-o", "--output", v => outputDir = v)
+            .On("-g", "--goal", v => goal = v)
+            .On("-p", "--profile", v => profile = v)
+            .Flag("--dry-run", () => dryRun = true)
             .Flag("-h", "--help", () => showHelp = true)
             .Flag("-v", "--version", () => showVersion = true)
             .Flag("--v", () => showVersion = true)
@@ -26,7 +32,7 @@ internal static class OptionsParser
         if (patterns.Count == 0)
             patterns.AddRange(DefaultPatterns);
 
-        return new Options(patterns, Path.GetFullPath(outputDir), showHelp, showVersion);
+        return new Options(patterns, Path.GetFullPath(outputDir), showHelp, showVersion, goal, dryRun, profile);
     }
 
     public static IReadOnlyList<string> ResolveInputFiles(IReadOnlyList<string> patterns, string baseDir)

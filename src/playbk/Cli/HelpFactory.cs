@@ -12,12 +12,16 @@ internal static class HelpFactory
             new[]
             {
                 "dotnet run --project src/playbk -- -i inputs/rickroll.idleops.yaml",
-                "dotnet run --project src/playbk -- -i \"inputs/*.yaml\" -o ./outputs"
+                "dotnet run --project src/playbk -- -i \"inputs/*.yaml\" -o ./outputs",
+                "dotnet run --project src/playbk -- --goal \"open notepad and type hello\" --dry-run"
             },
             new[]
             {
                 "-i, --input    Input script pattern(s) (comma-separated). Default: inputs/*.idleops.yaml, inputs/*.yaml",
                 "-o, --output   Output directory for captures (default: outputs)",
+                "-g, --goal     Generate a playbook from a natural-language goal (via the LLM registry) and run it",
+                "    --dry-run  With --goal: print the generated playbook but do not run it",
+                "-p, --profile  Transport target: local (default) | offbox (HID + capture; vision-only, no UIA/window/exec)",
                 "-h, --help     Show help",
                 "-v, --v, --version Show version"
             }

@@ -1,13 +1,10 @@
-using System.Drawing.Imaging;
-using System.Runtime.Versioning;
-using IdleOps.Shared.Logging;
-using IdleOps.Shared.Windows;
+using IdleOps.Shared.Capture;
+using IdleOps.Shared.Ocr;
+using IdleOps.Shared.Windowing;
 using waitfr.Cli;
-using Windows.Graphics.Imaging;
-using Windows.Media.Ocr;
-using Windows.Storage.Streams;
-
-[assembly: SupportedOSPlatform("windows10.0.22621.0")]
+#if WINDOWS
+using IdleOps.Shared.Win;
+#endif
 
 namespace waitfr;
 
@@ -30,9 +27,8 @@ internal static class Program
         var text = options.Text;
         var timeout = options.Timeout;
         var gone = options.Gone;
-        var showHelp = options.ShowHelp;
 
-        if (showHelp || string.IsNullOrWhiteSpace(window))
+        if (options.ShowHelp || string.IsNullOrWhiteSpace(window))
         {
             Console.WriteLine("""
                 Usage: waitfr --window "<title>" [--text "<search>"] [--timeout <seconds>] [--gone]
@@ -51,7 +47,32 @@ internal static class Program
                   0 = condition met
                   1 = timeout or error
                 """);
-            return showHelp ? 0 : 1;
+            return options.ShowHelp ? 0 : 1;
+        }
+
+        var locator = WindowLocatorFactory.Create();
+        if (locator is null)
+        {
+            Console.Error.WriteLine("[waitfr] no window locator for this OS (supported: Windows, Linux/X11).");
+            return 1;
+        }
+
+        // OCR is only needed when waiting for text — build the finder lazily.
+        ImageTextFinder? finder = null;
+        if (text is not null && !gone)
+        {
+            var capturer = ScreenCapturerFactory.Create();
+            if (capturer is null)
+            {
+                Console.Error.WriteLine("[waitfr] no screen capturer for this OS.");
+                return 1;
+            }
+#if WINDOWS
+            ITextRecognizer recognizer = new WinRtTextRecognizer();
+#else
+            ITextRecognizer recognizer = new TesseractTextRecognizer();
+#endif
+            finder = new ImageTextFinder(capturer, recognizer);
         }
 
         var deadline = DateTime.UtcNow.AddSeconds(timeout);
@@ -59,28 +80,27 @@ internal static class Program
 
         while (DateTime.UtcNow < deadline)
         {
-            var match = WindowMatcher.FindWindow(window);
+            var exists = locator.Exists(window);
 
             if (gone)
             {
-                if (match is null)
+                if (!exists)
                 {
                     Console.Error.WriteLine("[waitfr] Window gone.");
                     return 0;
                 }
             }
-            else if (match is not null)
+            else if (exists)
             {
                 if (text is null)
                 {
-                    Console.Error.WriteLine($"[waitfr] Window '{match.Title}' found.");
+                    Console.Error.WriteLine($"[waitfr] Window '{locator.ResolveTitle(window) ?? window}' found.");
                     return 0;
                 }
 
-                // OCR check
-                if (await WindowContainsTextAsync(match.Handle, text))
+                if (await finder!.FindAsync(window, text) is not null)
                 {
-                    Console.Error.WriteLine($"[waitfr] Text '{text}' found in '{match.Title}'.");
+                    Console.Error.WriteLine($"[waitfr] Text '{text}' found in '{window}'.");
                     return 0;
                 }
             }
@@ -90,33 +110,5 @@ internal static class Program
 
         Console.Error.WriteLine($"[waitfr] Timed out after {timeout:0.#}s.");
         return 1;
-    }
-
-    private static async Task<bool> WindowContainsTextAsync(IntPtr handle, string searchText)
-    {
-        try
-        {
-            using var bitmap = WindowCapture.CaptureWindow(handle);
-            using var ms = new MemoryStream();
-            bitmap.Save(ms, ImageFormat.Png);
-            ms.Position = 0;
-
-            var stream = new InMemoryRandomAccessStream();
-            await ms.CopyToAsync(stream.AsStreamForWrite());
-            stream.Seek(0);
-
-            var decoder = await BitmapDecoder.CreateAsync(stream);
-            using var softwareBitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
-
-            var engine = OcrEngine.TryCreateFromUserProfileLanguages();
-            if (engine is null) return false;
-
-            var result = await engine.RecognizeAsync(softwareBitmap);
-            return result.Text.Contains(searchText, StringComparison.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            return false;
-        }
     }
 }

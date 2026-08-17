@@ -1,7 +1,3 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using IdleOps.Shared.Platform;
-using IdleOps.Shared.Windows;
 using inpctl.Cli;
 using inpctl.Input;
 
@@ -21,7 +17,12 @@ internal static class Program
             return options.HasAction ? 0 : 1;
         }
 
-        if (!PlatformSupport.EnsureWindows("inpctl")) return 1;
+        var backend = InputBackendFactory.Create();
+        if (backend is null)
+        {
+            Console.Error.WriteLine("[inpctl] no input backend for this OS (supported: Windows, Linux/X11).");
+            return 1;
+        }
 
         if (options.SendCtrlC)
         {
@@ -30,42 +31,43 @@ internal static class Program
                 Console.Error.WriteLine("[inpctl] --ctrlc requires --pid.");
                 return 1;
             }
-            return SendCtrlC(options.Pid.Value) ? 0 : 1;
+            return backend.SendInterrupt(options.Pid.Value) ? 0 : 1;
         }
 
         var hwnd = options.Window is not null
-            ? WindowMatcher.FindWindow(options.Window, preferNewest: true)?.Handle ?? IntPtr.Zero
-            : GetForegroundWindow();
+            ? backend.FindWindow(options.Window)
+            : backend.ForegroundWindow();
 
-        if (hwnd == IntPtr.Zero)
+        if (hwnd == 0)
         {
             Console.Error.WriteLine($"[inpctl] Window '{options.Window ?? "<foreground>"}' not found.");
             return 1;
         }
 
-        // Background input posts messages to the target without stealing focus.
-        // Foreground input (default) uses SendInput, which requires the window up front.
-        if (!options.Background)
+        if (options.Hold is not null)
         {
-            if (!FocusWindow(hwnd))
-            {
-                Console.Error.WriteLine("[inpctl] Could not focus target window; sending input anyway.");
-            }
+            return RunHold(options, hwnd, backend);
         }
 
-        // SendInput ignores hwnd (it hits the focused control); PostMessage needs the
-        // focused child window of the target's thread, not the top-level frame.
-        var inputTarget = options.Background ? ResolveInputTarget(hwnd) : hwnd;
+        // Background input targets the window without stealing focus; foreground
+        // input (default) focuses the window first.
+        if (!options.Background)
+        {
+            if (!backend.Focus(hwnd))
+                Console.Error.WriteLine("[inpctl] Could not focus target window; sending input anyway.");
+        }
+
+        var inputTarget = options.Background ? backend.ResolveInputTarget(hwnd) : hwnd;
 
         // Window management (before input actions)
-        if (options.Maximize) { Console.WriteLine("[inpctl] Maximizing window."); ShowWindow(hwnd, 3); }
-        else if (options.Minimize) { Console.WriteLine("[inpctl] Minimizing window."); ShowWindow(hwnd, 6); }
-        else if (options.Restore) { Console.WriteLine("[inpctl] Restoring window."); ShowWindow(hwnd, 9); }
+        if (options.Maximize) { Console.WriteLine("[inpctl] Maximizing window."); backend.SetState(hwnd, WindowVisualState.Maximize); }
+        else if (options.Minimize) { Console.WriteLine("[inpctl] Minimizing window."); backend.SetState(hwnd, WindowVisualState.Minimize); }
+        else if (options.Restore) { Console.WriteLine("[inpctl] Restoring window."); backend.SetState(hwnd, WindowVisualState.Restore); }
 
         if (options.Resize is not null || options.Move is not null)
         {
-            var rect = WindowMatcher.GetWindowBounds(hwnd);
-            var x = rect.Left; var y = rect.Top; var w = rect.Width; var h = rect.Height;
+            var bounds = backend.GetBounds(hwnd) ?? new WindowBounds(0, 0, 0, 0);
+            var x = bounds.X; var y = bounds.Y; var w = bounds.Width; var h = bounds.Height;
 
             if (options.Move is not null)
             {
@@ -83,106 +85,49 @@ internal static class Program
             }
 
             Console.WriteLine($"[inpctl] Moving/resizing to ({x},{y}) {w}x{h}");
-            MoveWindow(hwnd, x, y, w, h, true);
+            backend.MoveResize(hwnd, x, y, w, h);
         }
 
         // Input actions
         if (options.Keyboard is not null)
-        { Console.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}{(options.Background ? " (background)" : "")}"); if (!InputSender.SendKeyboard(options.Keyboard, inputTarget, options.Background)) return 1; }
+        { Console.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}{(options.Background ? " (background)" : "")}"); if (!backend.SendKeyboard(options.Keyboard, inputTarget, options.Background)) return 1; }
 
         if (options.Type is not null)
-        { Console.WriteLine($"[inpctl] Typing text: {options.Type}{(options.Background ? " (background)" : "")}"); if (!InputSender.TypeText(options.Type, inputTarget, options.Background)) return 1; }
+        { Console.WriteLine($"[inpctl] Typing text: {options.Type}{(options.Background ? " (background)" : "")}"); if (!backend.TypeText(options.Type, inputTarget, options.Background)) return 1; }
 
         if (options.LeftMouse is not null)
-        { Console.WriteLine($"[inpctl] Left mouse: {options.LeftMouse}"); if (!InputSender.SendMouse(options.LeftMouse, hwnd, MouseButton.Left, options.MoveCursor)) return 1; }
+        { Console.WriteLine($"[inpctl] Left mouse: {options.LeftMouse}"); if (!backend.SendMouse(options.LeftMouse, hwnd, MouseButton.Left, options.MoveCursor)) return 1; }
 
         if (options.RightMouse is not null)
-        { Console.WriteLine($"[inpctl] Right mouse: {options.RightMouse}"); if (!InputSender.SendMouse(options.RightMouse, hwnd, MouseButton.Right, options.MoveCursor)) return 1; }
+        { Console.WriteLine($"[inpctl] Right mouse: {options.RightMouse}"); if (!backend.SendMouse(options.RightMouse, hwnd, MouseButton.Right, options.MoveCursor)) return 1; }
 
         if (options.MiddleMouse is not null)
-        { Console.WriteLine($"[inpctl] Middle mouse: {options.MiddleMouse}"); if (!InputSender.SendMouse(options.MiddleMouse, hwnd, MouseButton.Middle, options.MoveCursor)) return 1; }
+        { Console.WriteLine($"[inpctl] Middle mouse: {options.MiddleMouse}"); if (!backend.SendMouse(options.MiddleMouse, hwnd, MouseButton.Middle, options.MoveCursor)) return 1; }
 
         return 0;
     }
 
-    private static bool SendCtrlC(int pid)
+    // Hold key(s) down until the duration elapses or Ctrl+C. Foreground focuses the
+    // window first; background targets the window without stealing focus.
+    private static int RunHold(Options options, nint hwnd, IInputBackend backend)
     {
-        try { _ = Process.GetProcessById(pid); }
-        catch { Console.Error.WriteLine($"[inpctl] Process {pid} not found."); return false; }
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };
 
-        FreeConsole();
+        var mode = options.Method == InputMethod.Background ? "background" : "foreground";
+        if (options.Duration <= 0)
+            Console.Error.WriteLine($"[inpctl] Holding '{options.Hold}' ({mode}) — press Ctrl+C to release.");
+        else
+            Console.Error.WriteLine($"[inpctl] Holding '{options.Hold}' ({mode}) for {options.Duration:0.#}s...");
 
-        if (!AttachConsole((uint)pid))
-        { Console.Error.WriteLine($"[inpctl] Could not attach to console for PID {pid}."); return false; }
-
-        try
+        if (options.Method == InputMethod.Background)
         {
-            SetConsoleCtrlHandler(null, true);
-            if (!GenerateConsoleCtrlEvent(0, 0))
-            { Console.Error.WriteLine($"[inpctl] Failed to send CTRL+C to PID {pid}."); return false; }
-
-            try
-            {
-                using var target = Process.GetProcessById(pid);
-                if (!target.WaitForExit(5000))
-                { Console.Error.WriteLine("[inpctl] Target did not exit."); return false; }
-            }
-            catch { /* best-effort */ }
-            return true;
+            var target = backend.ResolveInputTarget(hwnd);
+            return backend.HoldBackground(options.Hold!, target, options.Interval, options.Duration, cts.Token) ? 0 : 1;
         }
-        finally { SetConsoleCtrlHandler(null, false); FreeConsole(); }
+
+        if (!backend.Focus(hwnd))
+            Console.Error.WriteLine("[inpctl] Could not focus target window; holding anyway.");
+        return backend.HoldForeground(options.Hold!, options.Duration, cts.Token) ? 0 : 1;
     }
-
-    private static bool FocusWindow(IntPtr hwnd)
-    {
-        AllowSetForegroundWindow(0xFFFFFFFF);
-        for (var i = 0; i < 10; i++)
-        {
-            var windowThread = GetWindowThreadProcessId(hwnd, IntPtr.Zero);
-            var currentThread = GetCurrentThreadId();
-            if (windowThread != 0 && currentThread != 0 && windowThread != currentThread)
-                AttachThreadInput(currentThread, windowThread, true);
-
-            ShowWindow(hwnd, 9);
-            SwitchToThisWindow(hwnd, true);
-            BringWindowToTop(hwnd);
-            if (SetForegroundWindow(hwnd)) return true;
-            Thread.Sleep(150);
-        }
-        return false;
-    }
-
-    // For background posting, find the window that actually holds keyboard focus
-    // within the target's thread (the edit control / render widget), not the frame.
-    // Falls back to the top-level window when the thread has no focused child
-    // (common for an inactive window — background input is best-effort there).
-    private static IntPtr ResolveInputTarget(IntPtr hwnd)
-    {
-        var threadId = GetWindowThreadProcessId(hwnd, IntPtr.Zero);
-        if (threadId == 0) return hwnd;
-
-        var info = new GUITHREADINFO { cbSize = (uint)Marshal.SizeOf<GUITHREADINFO>() };
-        if (GetGUIThreadInfo(threadId, ref info) && info.hwndFocus != IntPtr.Zero)
-        {
-            return info.hwndFocus;
-        }
-        return hwnd;
-    }
-
-    // P/Invoke — window management and process control
-    [DllImport("user32.dll")] private static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] private static extern bool GetGUIThreadInfo(uint idThread, ref GUITHREADINFO lpgui);
-    [DllImport("user32.dll")] private static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-    [DllImport("user32.dll")] private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] private static extern bool BringWindowToTop(IntPtr hWnd);
-    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
-    [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
-    [DllImport("user32.dll")] private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-    [DllImport("user32.dll")] private static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
-    [DllImport("user32.dll")] private static extern bool AllowSetForegroundWindow(uint dwProcessId);
-    [DllImport("kernel32.dll")] private static extern bool AttachConsole(uint dwProcessId);
-    [DllImport("kernel32.dll")] private static extern bool FreeConsole();
-    [DllImport("kernel32.dll")] private static extern bool GenerateConsoleCtrlEvent(uint dwCtrlEvent, uint dwProcessGroupId);
-    [DllImport("kernel32.dll")] private static extern bool SetConsoleCtrlHandler(Delegate? handlerRoutine, bool add);
 }

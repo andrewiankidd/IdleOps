@@ -1,11 +1,14 @@
 using System.Text;
-using IdleOps.Shared.Windows;
+using IdleOps.Shared.Windowing;
 using IdleOps.Shared.Windows.Uia;
 
 namespace stpcap.Recording;
 
 internal static class ScriptGenerator
 {
+    // Cross-platform window bounds (user32 on Windows, xdotool on Linux).
+    private static readonly IWindowLocator? Locator = WindowLocatorFactory.Create();
+
     private static readonly Dictionary<ushort, string> VkNames = new()
     {
         [0x08] = "BACKSPACE", [0x09] = "TAB", [0x0D] = "ENTER", [0x10] = "SHIFT",
@@ -174,11 +177,10 @@ internal static class ScriptGenerator
 
     private static (int x, int y) ToWindowRelative(string? windowTitle, int screenX, int screenY)
     {
-        if (windowTitle is null) return (screenX, screenY);
-        var match = WindowMatcher.FindWindow(windowTitle);
-        if (match is null) return (screenX, screenY);
-        var rect = WindowMatcher.GetWindowBounds(match.Handle);
-        return (screenX - rect.Left, screenY - rect.Top);
+        if (windowTitle is null || Locator is null) return (screenX, screenY);
+        var bounds = Locator.GetBounds(windowTitle);
+        if (bounds is not { } b) return (screenX, screenY);
+        return (screenX - b.X, screenY - b.Y);
     }
 
     private static string EscapeYaml(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");

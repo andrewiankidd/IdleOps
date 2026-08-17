@@ -77,10 +77,3 @@ internal enum MouseEventFlags : uint
     MIDDLEUP = 0x0040,
     ABSOLUTE = 0x8000
 }
-
-internal enum MouseButton
-{
-    Left,
-    Right,
-    Middle
-}

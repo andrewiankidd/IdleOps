@@ -4,7 +4,9 @@ IdleOps is a modular toolkit for automating desktop interactions, capturing medi
 
 ## Components
 
-Platform support: 🟢 works · 🟡 stubbed (builds, but exits with a clear "not implemented on this platform" message — no native equivalent yet) · 🔴 not available (Windows-only build).
+Platform support: 🟢 works · 🟡 partial / **macOS: written but UNVERIFIED** · 🔴 not available.
+
+> **macOS status:** the macOS backends (input via `cliclick`, per-window capture via `screencapture`, window control + accessibility via `osascript`/System Events) are **written but not yet run on a Mac** — they compile and their pure logic is unit-tested, but end-to-end behaviour is unvalidated and needs testing on real hardware (plus `brew install cliclick` and Accessibility permission). Treat 🟡-macOS as "code exists, verify before relying on it."
 
 ### Capture
 | Tool | Description | Win | Lin | Mac |
@@ -12,18 +14,18 @@ Platform support: 🟢 works · 🟡 stubbed (builds, but exits with a clear "no
 | **[audcap](docs/audcap/README.md)** | Cross-platform system audio capture (WAV) | 🟢 | 🟢 | 🟢 |
 | **[vidcap](docs/vidcap/README.md)** | Cross-platform screen/window video capture (MP4) | 🟢 | 🟢 | 🟢 |
 | **[outcap](docs/outcap/README.md)** | Synchronized audio + video capture and merge | 🟢 | 🟢 | 🟢 |
-| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) | 🟢 | 🟡 | 🟡 |
+| **[scrcap](docs/scrcap/README.md)** | Window screenshot capture (PNG/JPEG/BMP) | 🟢 | 🟢 | 🟡 |
 
 ### Automation
 | Tool | Description | Win | Lin | Mac |
 |------|-------------|:---:|:---:|:---:|
-| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, assert-text, type, screenshot, speak, UIA verbs) | 🟢 | 🔴 | 🔴 |
-| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management | 🟢 | 🟡 | 🟡 |
-| **[uiactl](docs/uiactl/README.md)** | Element automation via UI Automation — set-value/invoke/toggle/etc. by accessibility tree, focus-free | 🟢 | 🟡 | 🟡 |
-| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates | 🟢 | 🔴 | 🔴 |
-| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image | 🟢 | 🟡 | 🟡 |
-| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions | 🟢 | 🔴 | 🔴 |
-| **[stpcap](docs/stpcap/README.md)** | Record user input into YAML scripts — emits resilient semantic steps (UIA → OCR → coords) | 🟢 | 🟡 | 🟡 |
+| **[playbk](docs/playbk/README.md)** | YAML script execution engine (exec, sleep, wait-window, click-text, assert-text, type, keyboard, screenshot, speak, UIA verbs) | 🟢 | 🟢 | 🟡 |
+| **[inpctl](docs/inpctl/README.md)** | Keyboard/mouse input + window management | 🟢 | 🟢 | 🟡 |
+| **[uiactl](docs/uiactl/README.md)** | Element automation by accessibility tree (Windows UIA / Linux AT-SPI2), focus-free | 🟢 | 🟢 | 🟡 |
+| **[txtfnd](docs/txtfnd/README.md)** | Find text on screen via OCR, return coordinates | 🟢 | 🟢 | 🟡 |
+| **[imgfnd](docs/imgfnd/README.md)** | Find UI elements by reference image (pure-managed template match) | 🟢 | 🟢 | 🟡 |
+| **[waitfr](docs/waitfr/README.md)** | Wait for window/text conditions | 🟢 | 🟢 | 🟡 |
+| **[stpcap](docs/stpcap/README.md)** | Record user input into YAML scripts (Windows hooks / Linux XRecord) | 🟢 | 🟢 | 🟡 |
 
 ### Utilities
 | Tool | Description | Win | Lin | Mac |
@@ -72,6 +74,13 @@ Drive native applications via OCR (`txtfnd`) and image matching (`imgfnd`) inste
 
 ### Record & replay workflows
 Use `stpcap` to record yourself doing a task, then replay it via `playbk` — no manual scripting required for simple workflows.
+
+### Sustained / background input
+Hold a key down for a duration with `inpctl --hold`. `--method background` posts to a window without stealing focus — e.g. holding "F" in **Palworld** (an Unreal game) to keep an action running while you work in another window, which the game's own toggle stops doing on focus loss:
+```bash
+inpctl --window "Palworld*" --hold "F" --method background --duration 3600
+```
+Only works on targets that process their window message queue (Unreal games do; RawInput/DirectInput-only games need `--method foreground`, which requires focus). Input automation on official multiplayer is anti-cheat territory — keep it to singleplayer / private servers.
 
 ### Composition via shell pipes
 Tools output machine-readable data on stdout, status on stderr — pipe them together:

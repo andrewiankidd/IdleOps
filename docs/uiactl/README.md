@@ -1,6 +1,9 @@
 # uiactl — Element Automation via UI Automation
 
-> **Platform:** 🟢 Windows · 🟡 Linux · 🟡 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows (UIA) · 🟢 Linux (AT-SPI2) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+>
+> **Linux (AT-SPI2):** needs `python3-pyatspi` + `at-spi2-core` and a running accessibility bus (a session D-Bus with `GTK_MODULES=gail:atk-bridge`). **App coverage varies** — GTK/GNOME apps expose rich trees; some toolkits expose little or nothing. `--control-type` maps to AT-SPI roles (Button→"push button", Edit→"text", …); `--automation-id` is rarely available (AT-SPI seldom exposes an id) and falls back to name. X11 for window matching.
+> **macOS:** backend written (UNVERIFIED) — AppleScript UI scripting via `osascript`/System Events (invoke/set-value/get-value/dump). AppleScript element addressing is finicky and this is the least-validated backend; needs Accessibility permission and testing on real hardware.
 
 Drive desktop controls by their **accessibility tree** instead of screen
 coordinates or OCR. `uiactl` finds a control by AutomationId / Name / ControlType

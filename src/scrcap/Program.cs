@@ -1,12 +1,7 @@
-using System.Drawing.Imaging;
-using System.Runtime.Versioning;
+using IdleOps.Shared.Capture;
 using IdleOps.Shared.Cli;
 using IdleOps.Shared.Logging;
-using IdleOps.Shared.Platform;
-using IdleOps.Shared.Windows;
 using scrcap.Cli;
-
-[assembly: SupportedOSPlatform("windows")]
 
 namespace scrcap;
 
@@ -39,18 +34,16 @@ internal static class Program
             return 0;
         }
 
-        if (!PlatformSupport.EnsureWindows("scrcap")) return 1;
-
         if (string.IsNullOrWhiteSpace(options.Window))
         {
-            ConsoleLogger.Error("--window is required.");
+            ConsoleLogger.Error("--window is required (use 'screen' for the whole display).");
             return 1;
         }
 
-        var match = WindowMatcher.FindWindow(options.Window, preferNewest: true);
-        if (match is null)
+        var capturer = ScreenCapturerFactory.Create();
+        if (capturer is null)
         {
-            ConsoleLogger.Error($"Window '{options.Window}' not found.");
+            ConsoleLogger.Error("no screen capturer for this OS (supported: Windows, Linux/X11, macOS).");
             return 1;
         }
 
@@ -63,13 +56,13 @@ internal static class Program
                 Directory.CreateDirectory(outputDir);
             }
 
-            Console.Error.WriteLine($"[scrcap] Capturing window '{match.Title}' -> {outputPath}");
+            var outcome = capturer.Capture(options.Window, outputPath);
+            if (!outcome.Ok)
+            {
+                return 1;
+            }
 
-            using var bitmap = WindowCapture.CaptureWindow(match.Handle);
-            var format = GetImageFormat(outputPath);
-            bitmap.Save(outputPath, format);
-
-            Console.Error.WriteLine($"[scrcap] Saved {bitmap.Width}x{bitmap.Height} screenshot.");
+            Console.Error.WriteLine($"[scrcap] Saved {outcome.Width}x{outcome.Height} screenshot ({capturer.Name}).");
             Console.WriteLine(outputPath);
             return 0;
         }
@@ -78,18 +71,5 @@ internal static class Program
             ConsoleLogger.Error($"Capture failed: {ex.Message}");
             return 1;
         }
-    }
-
-    private static ImageFormat GetImageFormat(string path)
-    {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        return ext switch
-        {
-            ".jpg" or ".jpeg" => ImageFormat.Jpeg,
-            ".bmp" => ImageFormat.Bmp,
-            ".gif" => ImageFormat.Gif,
-            ".tiff" or ".tif" => ImageFormat.Tiff,
-            _ => ImageFormat.Png
-        };
     }
 }

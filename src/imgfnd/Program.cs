@@ -1,11 +1,5 @@
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.Runtime.Versioning;
-using IdleOps.Shared.Platform;
-using IdleOps.Shared.Windows;
-using OpenCvSharp;
-
-[assembly: SupportedOSPlatform("windows")]
+using IdleOps.Shared.Capture;
+using imgfnd.Matching;
 
 namespace imgfnd;
 
@@ -38,7 +32,7 @@ internal static class Program
                 Find a reference image within a window screenshot and return its center coordinates.
 
                 Options:
-                  -w, --window      Window title pattern (supports * wildcards)
+                  -w, --window      Window title pattern (supports * wildcards; 'screen' = whole display)
                   -i, --image       Path to reference image (PNG, JPG, BMP)
                   --threshold       Match confidence threshold 0.0-1.0 (default: 0.8)
                   -h, --help        Show help
@@ -56,55 +50,50 @@ internal static class Program
             return 0;
         }
 
-        if (!PlatformSupport.EnsureWindows("imgfnd")) return 1;
-
         if (!File.Exists(imagePath))
         {
             Console.Error.WriteLine($"[imgfnd] Reference image not found: {imagePath}");
             return 1;
         }
 
-        var match = WindowMatcher.FindWindow(window!, preferNewest: true);
-        if (match is null)
+        var capturer = ScreenCapturerFactory.Create();
+        if (capturer is null)
         {
-            Console.Error.WriteLine($"[imgfnd] Window '{window}' not found.");
+            Console.Error.WriteLine("[imgfnd] no screen capturer for this OS (supported: Windows, Linux/X11, macOS).");
             return 1;
         }
 
-        Console.Error.WriteLine($"[imgfnd] Capturing window '{match.Title}', matching against '{imagePath}'...");
-
+        var tempPng = Path.Combine(Path.GetTempPath(), $"imgfnd-{Guid.NewGuid():N}.png");
         try
         {
-            using var bitmap = WindowCapture.CaptureWindow(match.Handle);
-            using var screenshotMat = BitmapToMat(bitmap);
-            using var templateMat = Cv2.ImRead(Path.GetFullPath(imagePath!), ImreadModes.Color);
-
-            if (templateMat.Empty())
+            Console.Error.WriteLine($"[imgfnd] Capturing window '{window}', matching against '{imagePath}'...");
+            var outcome = capturer.Capture(window!, tempPng);
+            if (!outcome.Ok)
             {
-                Console.Error.WriteLine("[imgfnd] Failed to load reference image.");
-                return 1;
+                return 1; // the capturer logs the reason (window not found, tool missing, ...)
             }
 
-            if (templateMat.Width > screenshotMat.Width || templateMat.Height > screenshotMat.Height)
+            var screenshot = ImageLoader.Load(tempPng);
+            var template = ImageLoader.Load(Path.GetFullPath(imagePath!));
+
+            if (template.Width > screenshot.Width || template.Height > screenshot.Height)
             {
                 Console.Error.WriteLine("[imgfnd] Reference image is larger than the window screenshot.");
                 return 1;
             }
 
-            using var result = new Mat();
-            Cv2.MatchTemplate(screenshotMat, templateMat, result, TemplateMatchModes.CCoeffNormed);
-            Cv2.MinMaxLoc(result, out _, out double maxVal, out _, out OpenCvSharp.Point maxLoc);
+            var match = TemplateMatcher.Match(screenshot, template);
 
-            if (maxVal < threshold)
+            if (match.Confidence < threshold)
             {
-                Console.Error.WriteLine($"[imgfnd] No match found (best confidence: {maxVal:0.###}, threshold: {threshold:0.###}).");
+                Console.Error.WriteLine($"[imgfnd] No match found (best confidence: {match.Confidence:0.###}, threshold: {threshold:0.###}).");
                 return 1;
             }
 
-            var centerX = maxLoc.X + templateMat.Width / 2;
-            var centerY = maxLoc.Y + templateMat.Height / 2;
+            var centerX = match.X + template.Width / 2;
+            var centerY = match.Y + template.Height / 2;
 
-            Console.Error.WriteLine($"[imgfnd] Match found at ({maxLoc.X},{maxLoc.Y}) confidence {maxVal:0.###}");
+            Console.Error.WriteLine($"[imgfnd] Match found at ({match.X},{match.Y}) confidence {match.Confidence:0.###}");
             Console.WriteLine($"{centerX},{centerY}");
             return 0;
         }
@@ -113,13 +102,9 @@ internal static class Program
             Console.Error.WriteLine($"[imgfnd] Failed: {ex.Message}");
             return 1;
         }
-    }
-
-    private static Mat BitmapToMat(Bitmap bitmap)
-    {
-        using var ms = new MemoryStream();
-        bitmap.Save(ms, ImageFormat.Png);
-        ms.Position = 0;
-        return Mat.FromImageData(ms.ToArray(), ImreadModes.Color);
+        finally
+        {
+            try { if (File.Exists(tempPng)) File.Delete(tempPng); } catch { /* best-effort */ }
+        }
     }
 }

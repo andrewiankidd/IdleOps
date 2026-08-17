@@ -2,7 +2,9 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
+    <!-- Multi-target: Windows TFM uses WinRT OCR (shared.win); net10.0 uses
+         Tesseract + xdotool, so waitfr runs on Linux too. -->
+    <TargetFrameworks>net10.0-windows10.0.22621.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -13,6 +15,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\shared\shared.csproj" />
+    <!-- WinRT OCR is Windows-only; reference it only for the Windows TFM. -->
+    <ProjectReference Include="..\shared.win\shared.win.csproj"
+                      Condition="'$(TargetFramework)' == 'net10.0-windows10.0.22621.0'" />
   </ItemGroup>
 
 </Project>

@@ -1,7 +1,11 @@
 using txtfnd.Cli;
+using IdleOps.Shared.Capture;
 using IdleOps.Shared.Cli;
 using IdleOps.Shared.Logging;
+using IdleOps.Shared.Ocr;
+#if WINDOWS
 using IdleOps.Shared.Win;
+#endif
 
 namespace txtfnd;
 
@@ -46,40 +50,41 @@ internal static class Program
             return 1;
         }
 
-        var finder = new WindowTextFinder();
-        var title = finder.ResolveTitle(options.Window);
-        if (title is null)
+        var capturer = ScreenCapturerFactory.Create();
+        if (capturer is null)
         {
-            ConsoleLogger.Error($"Window '{options.Window}' not found.");
+            ConsoleLogger.Error("no screen capturer for this OS (supported: Windows, Linux/X11, macOS).");
             return 1;
         }
 
-        // Status messages go to stderr so stdout is clean for piping
-        Console.Error.WriteLine($"[txtfnd] Capturing window '{title}' for OCR...");
+        // WinRT OCR on Windows (zero-install, warm engine); Tesseract elsewhere.
+#if WINDOWS
+        ITextRecognizer recognizer = new WinRtTextRecognizer();
+#else
+        ITextRecognizer recognizer = new TesseractTextRecognizer();
+#endif
+        var finder = new ImageTextFinder(capturer, recognizer);
+
+        Console.Error.WriteLine($"[txtfnd] Capturing window '{options.Window}' for OCR ({recognizer.Name})...");
 
         try
         {
-            var coords = await finder.FindAsync(options.Window, options.Text);
+            var words = await finder.RecognizeAllAsync(options.Window);
+            var coords = TextLocator.Locate(words, options.Text);
 
             if (coords is null)
             {
-                Console.Error.WriteLine($"[txtfnd] Text '{options.Text}' not found in window '{title}'.");
-
-                // Debug: show what was recognized
-                var all = await finder.RecognizeAllAsync(options.Window);
-                if (all.Count > 0)
+                Console.Error.WriteLine($"[txtfnd] Text '{options.Text}' not found in window '{options.Window}'.");
+                if (words.Count > 0)
                 {
                     Console.Error.WriteLine("[txtfnd] Recognized text:");
-                    foreach (var r in all)
-                    {
-                        Console.Error.WriteLine($"[txtfnd]   \"{r.Text}\" at ({r.X},{r.Y}) {r.Width}x{r.Height}");
-                    }
+                    foreach (var w in words)
+                        Console.Error.WriteLine($"[txtfnd]   \"{w.Text}\" at ({w.X},{w.Y}) {w.Width}x{w.Height}");
                 }
-
                 return 1;
             }
 
-            // Output coordinates on stdout for piping to inpctl
+            // Coordinates on stdout for piping to inpctl.
             Console.WriteLine($"{coords.Value.x},{coords.Value.y}");
             return 0;
         }

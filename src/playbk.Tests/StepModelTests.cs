@@ -220,6 +220,28 @@ public class StepModelTests
     }
 
     [Fact]
+    public void DeserializesHoldAction()
+    {
+        var yaml = """
+            steps:
+              - name: Hold a key
+                action: hold
+                window: "My App*"
+                text: "F"
+                duration: 30
+                method: background
+                interval: 50
+            """;
+        var script = Deserialize(yaml);
+        var step = script.Steps[0];
+        Assert.Equal("hold", step.Action);
+        Assert.Equal("F", step.Text);
+        Assert.Equal(30, step.Duration);
+        Assert.Equal("background", step.Method);
+        Assert.Equal(50, step.Interval);
+    }
+
+    [Fact]
     public void DeserializesUiaSetValueAction()
     {
         var yaml = """

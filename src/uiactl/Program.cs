@@ -1,9 +1,7 @@
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
 using IdleOps.Shared.Logging;
-using IdleOps.Shared.Platform;
 using IdleOps.Shared.Windows.Uia;
 using uiactl.Cli;
+using uiactl.Uia;
 
 namespace uiactl;
 
@@ -28,24 +26,18 @@ internal static class Program
             return options.HasVerb ? 0 : 1;
         }
 
-        if (!PlatformSupport.EnsureWindows("uiactl")) return 1;
-
-        return Run(options);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static int Run(Options options)
-    {
-        UiaAutomation uia;
-        try
+        var uia = UiAutomationFactory.Create();
+        if (uia is null)
         {
-            uia = new UiaAutomation();
-        }
-        catch (Exception ex)
-        {
-            ConsoleLogger.Error($"[uiactl] failed to start UI Automation: {ex.Message}");
+            ConsoleLogger.Error("[uiactl] no accessibility backend for this OS (supported: Windows UIA, Linux AT-SPI2).");
             return 1;
         }
+
+        return Run(options, uia);
+    }
+
+    private static int Run(Options options, IUiAutomation uia)
+    {
 
         // Screen-point query needs no window.
         if (options.ElementAt is not null)
@@ -97,8 +89,7 @@ internal static class Program
         return result.Ok ? 0 : 1;
     }
 
-    [SupportedOSPlatform("windows")]
-    private static UiaResult Dispatch(UiaAutomation uia, Options o, Selector sel)
+    private static UiaResult Dispatch(IUiAutomation uia, Options o, Selector sel)
     {
         var w = o.Window!;
         if (o.SetValue is not null) return uia.SetValue(w, sel, o.SetValue);

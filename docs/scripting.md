@@ -189,12 +189,57 @@ Retries wrap the whole step, so they compose with any action — a flaky launch
 > Retried steps re-run verbatim, so retry side-effecting steps (like `exec`
 > launching an app) only when a partial run is safe to repeat.
 
+### `hold` — hold key(s) down for a duration
+
+Sustained key input via `inpctl`. `text` is the key (or comma-separated keys held
+together); `duration` is required in a runbook (the step blocks until it elapses —
+use the `inpctl` CLI for an indefinite, Ctrl+C hold).
+
+`method` picks how the input is delivered — the right one depends on how the target
+consumes input:
+
+- **`foreground`** (default) — `SendInput` to the focused window. Works broadly, but
+  the target must be focused.
+- **`background`** — posts to the target window on an `interval` (default 30ms) with
+  no focus steal. Only works on targets that process their window message queue.
+
+```yaml
+- name: Hold F on the target for a minute
+  action: hold
+  window: "My App*"
+  text: "F"
+  duration: 60
+  method: background
+  interval: 30
+```
+
+**Example — holding a key in a background game.** This is the classic case for
+`method: background`. Unreal Engine games (e.g. **Palworld**) process posted
+`WM_KEYDOWN` messages, so they honor a held key even while unfocused — which is how
+you can hold "F" to keep an action going while you work in another window (something
+the game's own toggle stops doing the moment it loses focus):
+
+```yaml
+- name: Hold F in Palworld while it runs in the background
+  action: hold
+  window: "Palworld*"
+  text: "F"
+  duration: 3600      # one hour; or omit and use the inpctl CLI for a Ctrl+C hold
+  method: background
+```
+
+> Not universal: this works because Palworld is Unreal. Games that read input only
+> via RawInput/DirectInput ignore posted messages — for those, `method: foreground`
+> is the only option (and it requires the game window to be focused). And on
+> official multiplayer, any input automation is anti-cheat territory; keep it to
+> singleplayer / private servers.
+
 ## Fields
 
 | Field | Used by | Description |
 |-------|---------|-------------|
 | `name` | All | Display name shown in console during execution |
-| `action` | All | `exec`, `sleep`, `wait-window`, `click-text`, `assert-text`, `type`, `screenshot`, `speak`, and UIA: `set-value`, `assert-value`, `invoke`, `toggle`, `expand`, `collapse`, `select` |
+| `action` | All | `exec`, `sleep`, `wait-window`, `click-text`, `assert-text`, `type`, `screenshot`, `speak`, `hold`, and UIA: `set-value`, `assert-value`, `invoke`, `toggle`, `expand`, `collapse`, `select` |
 | `id` | `exec` | Identifier. Enables `%id_pid%` token expansion in later steps |
 | `args` | `exec`, `sleep` | Command string (exec) or duration in seconds (sleep) |
 | `wait` | `exec` | If `true`, block until process exits. Default: `false` |
@@ -210,6 +255,9 @@ Retries wrap the whole step, so they compose with any action — a flaky launch
 | `automation_id` | UIA actions | Select the element by AutomationId (preferred) |
 | `element` | UIA actions | Select the element by accessibility Name |
 | `control_type` | UIA actions | Select the element by control type (`Edit`, `Button`, `Document`, ...) |
+| `duration` | `hold` | Seconds to hold the key(s) down (must be > 0) |
+| `method` | `hold` | Delivery: `foreground` (SendInput) or `background` (post to window) |
+| `interval` | `hold` | Ms between re-posts for the `background` method (default 30) |
 
 ## Token Expansion
 

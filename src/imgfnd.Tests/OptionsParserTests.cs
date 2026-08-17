@@ -1,9 +1,5 @@
-using System.Runtime.Versioning;
 using imgfnd.Cli;
 using Xunit;
-
-// imgfnd is a Windows-only tool (OpenCV + WindowCapture), so its test assembly is too.
-[assembly: SupportedOSPlatform("windows")]
 
 namespace imgfnd.Tests;
 

@@ -1,6 +1,9 @@
 # waitfr — Wait for Condition
 
-> **Platform:** 🟢 Windows · 🔴 Linux · 🔴 macOS  —  🟢 works · 🟡 stubbed (clear “not implemented” exit) · 🔴 not available
+> **Platform:** 🟢 Windows · 🟢 Linux (X11) · 🟡 macOS  —  🟢 works · 🟡 partial · 🔴 not available
+>
+> **Linux (X11):** window presence via `xdotool`; the optional `--text` OCR wait needs `tesseract-ocr`.
+> **macOS:** window enumeration by title (CGWindowList) isn't wired up — exits with a clear message.
 
 Wait for a window to appear (or disappear), optionally waiting for specific text via OCR.
 

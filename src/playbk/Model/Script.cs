@@ -41,4 +41,9 @@ internal sealed class Step
     public string? AutomationId { get; set; }
     public string? Element { get; set; }
     public string? ControlType { get; set; }
+
+    // hold: sustained key input (via inpctl). text = key(s) to hold.
+    public double? Duration { get; set; }       // seconds to hold (required for the hold action)
+    public string? Method { get; set; }         // delivery: foreground | background
+    public int? Interval { get; set; }          // ms between re-posts (background method)
 }

@@ -15,4 +15,9 @@
     <ProjectReference Include="..\shared\shared.csproj" />
   </ItemGroup>
 
+  <!-- The Linux XRecord backend shells out to this helper; ship it beside the binary. -->
+  <ItemGroup>
+    <None Include="stprec_helper.py" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
