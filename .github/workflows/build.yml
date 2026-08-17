@@ -62,12 +62,21 @@ jobs:
             dotnet publish "src/$p/$p.csproj" -c Release -f net10.0-windows10.0.22621.0 -r win-x64 @sf -o "publish/$p"
             if ($LASTEXITCODE -ne 0) { exit 1 }
           }
-          # Co-locate the tools playbk shells out to. These MUST overwrite: playbk's own
-          # publish drops a bare apphost for each ProjectReferenced exe (no .dll beside it,
-          # because single-file bundled playbk's copy inside playbk.exe), so leaving those
-          # in place would ship stubs that exit with "application to execute does not exist".
-          foreach ($t in @('inpctl','scrcap','txtfnd','waitfr','uiactl','outcap')) {
-            if (Test-Path "publish/$t") { Copy-Item "publish/$t/*" "publish/playbk/" -Recurse -Force }
+          # Co-locate every tool beside playbk. playbk prepends its own directory to PATH
+          # (Program.cs) and shells out by bare name, so this is what makes the bundle work
+          # without anything being installed on PATH.
+          #
+          # Every tool, not just the ones playbk calls: its publish drops a bare apphost for
+          # each ProjectReferenced exe (audcap/vidcap/llmctl included) with no .dll beside
+          # it, since single-file bundled those into playbk.exe. Copying the whole set with
+          # -Force overwrites each stub with the real single-file executable; anything
+          # missed would ship as a stub that exits "application to execute does not exist".
+          # Only each tool's OWN executable: publish/outcap/ also contains bare apphosts for
+          # audcap and vidcap (it ProjectReferences them), so copying whole directories would
+          # reintroduce the very stubs this is meant to overwrite, order-dependently.
+          Get-ChildItem publish -Directory | Where-Object { $_.Name -ne 'playbk' } | ForEach-Object {
+            $exe = Join-Path $_.FullName "$($_.Name).exe"
+            if (Test-Path $exe) { Copy-Item $exe "publish/playbk/" -Force }
           }
 
       - name: Upload artifacts
@@ -177,12 +186,22 @@ jobs:
           dotnet publish src/txtfnd/txtfnd.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/txtfnd
           dotnet publish src/waitfr/waitfr.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/waitfr
           dotnet publish src/playbk/playbk.csproj -c Release -f net10.0 -r ${{ matrix.rid }} $SF -p:EnableWindowsTargeting=true -o publish/playbk
-          # Co-locate the tools playbk shells out to. These MUST overwrite (no `-n`):
-          # playbk's own publish drops a bare apphost for each ProjectReferenced exe, with
-          # no .dll beside it, so leaving those would ship stubs that fail with
-          # "application to execute does not exist".
-          for t in inpctl scrcap txtfnd waitfr uiactl outcap; do
-            [ -d "publish/$t" ] && cp -rf publish/$t/. publish/playbk/ || true
+          # Co-locate every tool beside playbk. playbk prepends its own directory to PATH
+          # (Program.cs) and shells out by bare name, so this is what makes the bundle work
+          # without anything being installed on PATH.
+          #
+          # Every tool, not just the ones playbk calls: its publish drops a bare apphost for
+          # each ProjectReferenced exe (audcap/vidcap/llmctl included) with no .dll beside
+          # it, since single-file bundled those into the playbk binary. Copying the whole
+          # set with -f overwrites each stub with the real single-file executable; anything
+          # missed would ship as a stub that exits "application to execute does not exist".
+          # Only each tool's OWN binary: publish/outcap/ also contains bare apphosts for
+          # audcap and vidcap (it ProjectReferences them), so copying whole directories would
+          # reintroduce the very stubs this is meant to overwrite, order-dependently.
+          for d in publish/*/; do
+            t="$(basename "$d")"
+            [ "$t" = playbk ] && continue
+            [ -f "$d$t" ] && cp -f "$d$t" publish/playbk/
           done
 
       - name: Upload artifacts
