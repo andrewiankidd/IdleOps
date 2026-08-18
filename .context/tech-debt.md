@@ -104,6 +104,14 @@ verifying are fixed and covered below. Remaining debt:
 cross-platform tools on ubuntu + macOS, with Linux e2e scripts (`scripts/linux-*.sh`)
 running the tools under Xvfb. No GitLab pipeline yet.
 
+A fifth Linux e2e (`scripts/linux-demo-e2e.sh`) is a *recorded* session rather than a
+tool-by-tool smoke test: vidcap records the X display while uiactl drives gnome-calculator
+through the accessibility tree and txtfnd reads the answer back off the screen with OCR.
+Each tool is used where it is actually good — AT-SPI presses the keys because OCR cannot
+read the small key glyphs (measured: tesseract returns only the window chrome), OCR reads
+the large result display. The recording is attached to the rolling `latest-main` release,
+which is recreated on every push, so exactly one current demo video exists at a stable URL.
+
 **No macOS e2e, and there can't easily be one.** Every macOS backend needs a TCC grant
 (Accessibility / Screen Recording / Microphone) against the *app* running the tools, which
 a hosted runner cannot give — an unattended `screencapture` just fails, and `cliclick`

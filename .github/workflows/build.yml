@@ -183,6 +183,16 @@ jobs:
         timeout-minutes: 15
         run: bash scripts/linux-playbk-e2e.sh
 
+      # A recorded automation session against a real GUI app: vidcap records the display
+      # while uiactl drives gnome-calculator and txtfnd reads the answer back via OCR.
+      # Unlike the other e2e steps this leaves a watchable artifact behind.
+      - name: Linux recorded demo (vidcap + uiactl + scrcap + txtfnd)
+        if: matrix.os == 'ubuntu-latest'
+        timeout-minutes: 15
+        run: |
+          sudo $APT install -y -qq ffmpeg
+          bash scripts/linux-demo-e2e.sh
+
       # if: always() is the point — a green run's screenshots are mildly interesting, but
       # a failed OCR or capture assertion is near-undebuggable from the text log alone.
       - name: Upload e2e evidence
@@ -191,6 +201,17 @@ jobs:
         with:
           name: e2e-evidence-${{ matrix.rid }}
           path: e2e-artifacts/
+          if-no-files-found: ignore
+
+      # Separate from the evidence bundle so the newest recording is one predictable
+      # download, and attached to the rolling release below so only the latest is kept.
+      - name: Upload the demo recording
+        if: always() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: demo-recording
+          path: e2e-artifacts/demo/demo.mp4
+          retention-days: 7
           if-no-files-found: ignore
 
       # One self-contained binary per tool (PublishSingleFile), so the bundle is a folder
@@ -249,6 +270,14 @@ jobs:
           pattern: idleops-*
           path: dist
 
+      # Best-effort: a run where the demo step failed still publishes the binaries.
+      - name: Download the demo recording
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: demo-recording
+          path: demo
+
       - name: Package one archive per platform
         run: |
           set -euo pipefail
@@ -285,7 +314,11 @@ jobs:
           make_latest: "false"
           draft: false
           target_commitish: ${{ github.sha }}
-          files: out/*
+          # latest-main is deleted and recreated each push, so the attached recording is
+          # always the newest one and older ones do not accumulate.
+          files: |
+            out/*
+            demo/demo.mp4
           body: |
             Auto-built from `main` at `${{ github.sha }}` — refreshed on every green push, so these
             assets always match the newest commit.
