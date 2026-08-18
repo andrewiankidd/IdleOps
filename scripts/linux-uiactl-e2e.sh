@@ -34,12 +34,21 @@ trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >/tmp/uiactl-xvfb.log 2>&1 & sleep 2
 openbox >/tmp/uiactl-ob.log 2>&1 & sleep 1
-gnome-calculator >/tmp/uiactl-calc.log 2>&1 & sleep 5
+gnome-calculator >/tmp/uiactl-calc.log 2>&1 &
 
 echo "== uiactl --dump: read the accessibility tree =="
-buttons="$(dotnet "$UIACTL" --window gnome-calculator --dump --max 80 2>/dev/null | grep -c 'push button')"
+# Poll rather than sleep a fixed amount. Registering on the accessibility bus takes ~2s
+# on an idle machine but is unbounded on a loaded CI runner, and a bare `sleep 5` here
+# failed a run with "saw 0" — the exact fixed-sleep race IdleOps itself tells users to
+# avoid by waiting on a condition.
+buttons=0
+for _ in $(seq 1 30); do
+  buttons="$(dotnet "$UIACTL" --window gnome-calculator --dump --max 80 2>/dev/null | grep -c 'push button' || true)"
+  [ "${buttons:-0}" -ge 5 ] && break
+  sleep 1
+done
 if [ "${buttons:-0}" -lt 5 ]; then
-  echo "FAIL: expected several push buttons, saw ${buttons:-0}"; exit 1
+  echo "FAIL: expected several push buttons, saw ${buttons:-0} after 30s"; exit 1
 fi
 echo "PASS: AT-SPI dump saw $buttons push buttons"
 
