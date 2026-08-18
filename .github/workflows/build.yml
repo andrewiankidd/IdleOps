@@ -47,6 +47,14 @@ jobs:
             -i src/playbk/inputs/smoke-test.idleops.yaml `
             -o ./smoke-outputs
 
+      - name: Upload smoke-test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: smoke-evidence-win-x64
+          path: smoke-outputs/
+          if-no-files-found: ignore
+
       # Windows is the only platform that ships every tool, so its bundle is the
       # complete set — the multi-targeted ones publish their Windows TFM here.
       # One self-contained .exe per tool (PublishSingleFile), so the bundle is a folder of
@@ -112,6 +120,9 @@ jobs:
       # Passed through `sudo` explicitly: sudo resets the environment, so exporting these
       # as plain job env would not reach apt.
       APT: "DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1 apt-get -o DPkg::Lock::Timeout=180"
+      # Where the e2e scripts copy their screenshots, generated playbooks and logs before
+      # tearing down their work dirs. Unset locally, so a dev run still leaves no litter.
+      E2E_ARTIFACTS: ${{ github.workspace }}/e2e-artifacts
     steps:
       - uses: actions/checkout@v7
 
@@ -171,6 +182,16 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         timeout-minutes: 15
         run: bash scripts/linux-playbk-e2e.sh
+
+      # if: always() is the point — a green run's screenshots are mildly interesting, but
+      # a failed OCR or capture assertion is near-undebuggable from the text log alone.
+      - name: Upload e2e evidence
+        if: always() && matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-evidence-${{ matrix.rid }}
+          path: e2e-artifacts/
+          if-no-files-found: ignore
 
       # One self-contained binary per tool (PublishSingleFile), so the bundle is a folder
       # of runnable executables rather than hundreds of loose DLLs.

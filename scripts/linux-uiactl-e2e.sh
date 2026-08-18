@@ -21,7 +21,15 @@ export DISPLAY=:99
 export GTK_MODULES=gail:atk-bridge GNOME_ACCESSIBILITY=1
 eval "$(dbus-launch --sh-syntax)" 2>/dev/null || true
 
-cleanup() { pkill gnome-calculator 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; }
+# Copy evidence somewhere durable before the work dir is torn down. CI sets
+# E2E_ARTIFACTS; unset (a local run) this is a no-op, so nothing is left lying around.
+collect_artifacts() {
+  [ -n "${E2E_ARTIFACTS:-}" ] || return 0
+  dest="$E2E_ARTIFACTS/uiactl"
+  mkdir -p "$dest"
+  cp -r /tmp/uiactl-*.log "$dest/" 2>/dev/null || true
+}
+cleanup() { collect_artifacts; pkill gnome-calculator 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >/tmp/uiactl-xvfb.log 2>&1 & sleep 2

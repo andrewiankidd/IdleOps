@@ -20,7 +20,15 @@ have_ocr=0; command -v tesseract >/dev/null 2>&1 && [ -n "$(find src/txtfnd/bin 
 
 export DISPLAY=:99
 work="$(mktemp -d)"
-cleanup() { pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
+# Copy evidence somewhere durable before the work dir is torn down. CI sets
+# E2E_ARTIFACTS; unset (a local run) this is a no-op, so nothing is left lying around.
+collect_artifacts() {
+  [ -n "${E2E_ARTIFACTS:-}" ] || return 0
+  dest="$E2E_ARTIFACTS/playbk"
+  mkdir -p "$dest"
+  cp -r "$work"/. "$dest/" 2>/dev/null || true
+}
+cleanup() { collect_artifacts; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >"$work/xvfb.log" 2>&1 & sleep 2

@@ -19,7 +19,15 @@ work="$(mktemp -d)"; out="$work/rec.yaml"
 # command lines, and this script's own is `bash scripts/linux-stpcap-e2e.sh` — which
 # contains "stpcap". The broader pattern makes the EXIT trap SIGTERM the script itself,
 # so a fully passing run still exits 143 right after printing ALL PASS.
-cleanup() { pkill -f stpcap.dll 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
+# Copy evidence somewhere durable before the work dir is torn down. CI sets
+# E2E_ARTIFACTS; unset (a local run) this is a no-op, so nothing is left lying around.
+collect_artifacts() {
+  [ -n "${E2E_ARTIFACTS:-}" ] || return 0
+  dest="$E2E_ARTIFACTS/stpcap"
+  mkdir -p "$dest"
+  cp -r "$work"/. "$dest/" 2>/dev/null || true
+}
+cleanup() { collect_artifacts; pkill -f stpcap.dll 2>/dev/null || true; pkill xterm 2>/dev/null || true; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >"$work/xvfb.log" 2>&1 & sleep 2

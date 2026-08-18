@@ -28,7 +28,15 @@ work="$(mktemp -d)"
 typed="$work/typed.txt"
 export DISPLAY=:99
 
-cleanup() { pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
+# Copy evidence somewhere durable before the work dir is torn down. CI sets
+# E2E_ARTIFACTS; unset (a local run) this is a no-op, so nothing is left lying around.
+collect_artifacts() {
+  [ -n "${E2E_ARTIFACTS:-}" ] || return 0
+  dest="$E2E_ARTIFACTS/x11"
+  mkdir -p "$dest"
+  cp -r "$work"/. "$dest/" 2>/dev/null || true
+}
+cleanup() { collect_artifacts; pkill -f "Xvfb :99" 2>/dev/null || true; pkill openbox 2>/dev/null || true; rm -rf "$work"; }
 trap cleanup EXIT
 
 Xvfb :99 -screen 0 1280x800x24 >"$work/xvfb.log" 2>&1 &
