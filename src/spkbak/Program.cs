@@ -24,10 +24,15 @@ internal static class Program
         var list = options.List;
         var showHelp = options.ShowHelp;
 
+        if (options.ShowVersion)
+        {
+            IdleOps.Shared.Cli.HelpPrinter.PrintVersion("spkbak", IdleOps.Shared.Cli.BuildInfo.Version);
+            return 0;
+        }
+
         if (showHelp)
         {
-            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("spkbak"));
-            Console.WriteLine("""
+            IdleOps.Shared.Cli.HelpPrinter.PrintRaw("spkbak", """
                 Usage: spkbak --text "<text>" [--output <file.wav>] [--voice "<name>"]
 
                 Text-to-speech: speak text aloud or save to WAV file.

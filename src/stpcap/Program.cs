@@ -29,6 +29,9 @@ internal static class Program
                 case "--help":
                     showHelp = true;
                     break;
+                case "--version":
+                    IdleOps.Shared.Cli.HelpPrinter.PrintVersion("stpcap", IdleOps.Shared.Cli.BuildInfo.Version);
+                    return 0;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 1;
@@ -37,8 +40,7 @@ internal static class Program
 
         if (showHelp)
         {
-            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("stpcap"));
-            Console.WriteLine("""
+            IdleOps.Shared.Cli.HelpPrinter.PrintRaw("stpcap", """
                 Usage: stpcap [--output <file>] [--window "<filter>"]
 
                 Record keyboard and mouse input into an IdleOps YAML script.
@@ -59,11 +61,11 @@ internal static class Program
             return 1;
         }
 
-        Console.WriteLine($"[stpcap] Recording input to '{output}' ({recorder.Name})...");
-        Console.WriteLine("[stpcap] Press Ctrl+C to stop and save.");
+        Console.Error.WriteLine($"[stpcap] Recording input to '{output}' ({recorder.Name})...");
+        Console.Error.WriteLine("[stpcap] Press Ctrl+C to stop and save.");
         if (windowFilter is not null)
         {
-            Console.WriteLine($"[stpcap] Filtering to windows matching '{windowFilter}'");
+            Console.Error.WriteLine($"[stpcap] Filtering to windows matching '{windowFilter}'");
         }
 
         using var cts = new CancellationTokenSource();
@@ -78,17 +80,17 @@ internal static class Program
         }
 
         var events = recorder.Events;
-        Console.WriteLine($"[stpcap] Captured {events.Count} events.");
+        Console.Error.WriteLine($"[stpcap] Captured {events.Count} events.");
 
         if (events.Count == 0)
         {
-            Console.WriteLine("[stpcap] No events recorded.");
+            Console.Error.WriteLine("[stpcap] No events recorded.");
             return 0;
         }
 
         var yaml = ScriptGenerator.Generate(events);
         File.WriteAllText(output, yaml);
-        Console.WriteLine($"[stpcap] Saved to '{output}'.");
+        Console.Error.WriteLine($"[stpcap] Saved to '{output}'.");
         return 0;
     }
 }

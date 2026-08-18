@@ -40,6 +40,9 @@ internal static class Program
                 case "--help":
                     showHelp = true;
                     break;
+                case "--version":
+                    Console.WriteLine($"cnvrtr {VersionLine()}");
+                    return 0;
                 default:
                     Console.Error.WriteLine($"Unknown argument: {args[i]}");
                     return 1;
@@ -626,14 +629,27 @@ internal static class Program
     /// System.Drawing and friends into what is currently the smallest binary in the set.
     /// Six duplicated lines is the cheaper trade.
     /// </summary>
-    private static string Banner()
+    private static string Banner() =>
+        Commit() is { Length: > 0 } c ? $"IdleOps - cnvrtr ({c})" : "IdleOps - cnvrtr";
+
+    /// <summary>Matches the shared BuildInfo.VersionLine() shape, e.g. "1.0.0 (a27da55)".</summary>
+    private static string VersionLine()
     {
-        var informational = Assembly.GetEntryAssembly()
-            ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        var informational = Informational();
         var plus = informational?.IndexOf('+') ?? -1;
-        var commit = plus >= 0 && plus < informational!.Length - 1 ? informational[(plus + 1)..] : null;
-        return commit is { Length: > 0 } c ? $"IdleOps - cnvrtr ({c})" : "IdleOps - cnvrtr";
+        var version = plus >= 0 ? informational![..plus] : informational ?? "0.0.0";
+        return Commit() is { Length: > 0 } c ? $"{version} ({c})" : version;
     }
+
+    private static string? Commit()
+    {
+        var informational = Informational();
+        var plus = informational?.IndexOf('+') ?? -1;
+        return plus >= 0 && plus < informational!.Length - 1 ? informational[(plus + 1)..] : null;
+    }
+
+    private static string? Informational() => Assembly.GetEntryAssembly()
+        ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
 
     private static void PrintHelp()
     {

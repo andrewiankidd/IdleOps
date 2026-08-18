@@ -28,10 +28,15 @@ internal static class Program
         var timeout = options.Timeout;
         var gone = options.Gone;
 
+        if (options.ShowVersion)
+        {
+            IdleOps.Shared.Cli.HelpPrinter.PrintVersion("waitfr", IdleOps.Shared.Cli.BuildInfo.Version);
+            return 0;
+        }
+
         if (options.ShowHelp || string.IsNullOrWhiteSpace(window))
         {
-            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("waitfr"));
-            Console.WriteLine("""
+            IdleOps.Shared.Cli.HelpPrinter.PrintRaw("waitfr", """
                 Usage: waitfr --window "<title>" [--text "<search>"] [--timeout <seconds>] [--gone]
 
                 Wait for a window to appear (or disappear with --gone).

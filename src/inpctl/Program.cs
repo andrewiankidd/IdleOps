@@ -12,7 +12,25 @@ internal static class Program
         // also sat above the help banner, so --help led with noise instead of the version.
         Console.Error.WriteLine($"[inpctl] args: {string.Join(' ', args)}");
 
-        var options = OptionsParser.Parse(args);
+        Options options;
+        try
+        {
+            options = OptionsParser.Parse(args);
+        }
+        catch (ArgumentException ex)
+        {
+            // Was an unhandled throw: a typo'd flag exited with a stack trace rather than
+            // the message. Every other tool catches this.
+            Console.Error.WriteLine($"[inpctl] {ex.Message}");
+            HelpFactory.PrintHelp();
+            return 1;
+        }
+
+        if (options.ShowVersion)
+        {
+            IdleOps.Shared.Cli.HelpPrinter.PrintVersion("inpctl", IdleOps.Shared.Cli.BuildInfo.Version);
+            return 0;
+        }
 
         if (options.ShowHelp || !options.HasAction)
         {
@@ -63,9 +81,9 @@ internal static class Program
         var inputTarget = options.Background ? backend.ResolveInputTarget(hwnd) : hwnd;
 
         // Window management (before input actions)
-        if (options.Maximize) { Console.WriteLine("[inpctl] Maximizing window."); backend.SetState(hwnd, WindowVisualState.Maximize); }
-        else if (options.Minimize) { Console.WriteLine("[inpctl] Minimizing window."); backend.SetState(hwnd, WindowVisualState.Minimize); }
-        else if (options.Restore) { Console.WriteLine("[inpctl] Restoring window."); backend.SetState(hwnd, WindowVisualState.Restore); }
+        if (options.Maximize) { Console.Error.WriteLine("[inpctl] Maximizing window."); backend.SetState(hwnd, WindowVisualState.Maximize); }
+        else if (options.Minimize) { Console.Error.WriteLine("[inpctl] Minimizing window."); backend.SetState(hwnd, WindowVisualState.Minimize); }
+        else if (options.Restore) { Console.Error.WriteLine("[inpctl] Restoring window."); backend.SetState(hwnd, WindowVisualState.Restore); }
 
         if (options.Resize is not null || options.Move is not null)
         {
@@ -87,25 +105,25 @@ internal static class Program
                 { Console.Error.WriteLine("[inpctl] Invalid resize. Expected: WxH or W,H"); return 1; }
             }
 
-            Console.WriteLine($"[inpctl] Moving/resizing to ({x},{y}) {w}x{h}");
+            Console.Error.WriteLine($"[inpctl] Moving/resizing to ({x},{y}) {w}x{h}");
             backend.MoveResize(hwnd, x, y, w, h);
         }
 
         // Input actions
         if (options.Keyboard is not null)
-        { Console.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}{(options.Background ? " (background)" : "")}"); if (!backend.SendKeyboard(options.Keyboard, inputTarget, options.Background)) return 1; }
+        { Console.Error.WriteLine($"[inpctl] Sending keyboard: {options.Keyboard}{(options.Background ? " (background)" : "")}"); if (!backend.SendKeyboard(options.Keyboard, inputTarget, options.Background)) return 1; }
 
         if (options.Type is not null)
-        { Console.WriteLine($"[inpctl] Typing text: {options.Type}{(options.Background ? " (background)" : "")}"); if (!backend.TypeText(options.Type, inputTarget, options.Background)) return 1; }
+        { Console.Error.WriteLine($"[inpctl] Typing text: {options.Type}{(options.Background ? " (background)" : "")}"); if (!backend.TypeText(options.Type, inputTarget, options.Background)) return 1; }
 
         if (options.LeftMouse is not null)
-        { Console.WriteLine($"[inpctl] Left mouse: {options.LeftMouse}"); if (!backend.SendMouse(options.LeftMouse, hwnd, MouseButton.Left, options.MoveCursor)) return 1; }
+        { Console.Error.WriteLine($"[inpctl] Left mouse: {options.LeftMouse}"); if (!backend.SendMouse(options.LeftMouse, hwnd, MouseButton.Left, options.MoveCursor)) return 1; }
 
         if (options.RightMouse is not null)
-        { Console.WriteLine($"[inpctl] Right mouse: {options.RightMouse}"); if (!backend.SendMouse(options.RightMouse, hwnd, MouseButton.Right, options.MoveCursor)) return 1; }
+        { Console.Error.WriteLine($"[inpctl] Right mouse: {options.RightMouse}"); if (!backend.SendMouse(options.RightMouse, hwnd, MouseButton.Right, options.MoveCursor)) return 1; }
 
         if (options.MiddleMouse is not null)
-        { Console.WriteLine($"[inpctl] Middle mouse: {options.MiddleMouse}"); if (!backend.SendMouse(options.MiddleMouse, hwnd, MouseButton.Middle, options.MoveCursor)) return 1; }
+        { Console.Error.WriteLine($"[inpctl] Middle mouse: {options.MiddleMouse}"); if (!backend.SendMouse(options.MiddleMouse, hwnd, MouseButton.Middle, options.MoveCursor)) return 1; }
 
         return 0;
     }

@@ -17,6 +17,7 @@ internal record Options
 
     public bool List { get; init; }          // print the resolved registry + which backend is active
     public bool ShowHelp { get; init; }
+    public bool ShowVersion { get; init; }
 
     public bool HasAction => Goal is not null || List;
 }

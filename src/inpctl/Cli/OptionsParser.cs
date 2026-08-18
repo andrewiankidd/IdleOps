@@ -34,6 +34,7 @@ internal static class OptionsParser
                 opts = opts with { Duration = seconds };
             })
             .On("--method", v => opts = opts with { Method = ParseMethod(v) })
+            .Flag("--version", () => opts = opts with { ShowVersion = true })
             .Flag("--ctrlc", () => opts = opts with { SendCtrlC = true })
             .Flag("--move-cursor", () => opts = opts with { MoveCursor = true })
             .Flag("--background", () => opts = opts with { Background = true })

@@ -7,4 +7,5 @@ internal record Options
     public double Timeout { get; init; } = 10;
     public bool Gone { get; init; }
     public bool ShowHelp { get; init; }
+    public bool ShowVersion { get; init; }
 }

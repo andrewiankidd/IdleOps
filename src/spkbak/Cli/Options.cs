@@ -8,4 +8,5 @@ internal record Options
     public string? Voice { get; init; }
     public bool List { get; init; }
     public bool ShowHelp { get; init; }
+    public bool ShowVersion { get; init; }
 }

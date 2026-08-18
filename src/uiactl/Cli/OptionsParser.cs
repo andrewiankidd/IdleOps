@@ -28,6 +28,7 @@ internal static class OptionsParser
             .Flag("--select", () => opts = opts with { Select = true })
             .Flag("--dump", () => opts = opts with { Dump = true })
             .Flag("-h", "--help", () => opts = opts with { ShowHelp = true })
+            .Flag("--version", () => opts = opts with { ShowVersion = true })
             .Parse();
 
         return opts;

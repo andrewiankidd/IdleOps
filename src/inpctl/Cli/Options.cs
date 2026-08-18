@@ -25,6 +25,7 @@ internal record Options
     public bool MoveCursor { get; init; }
     public bool Background { get; init; }
     public bool ShowHelp { get; init; }
+    public bool ShowVersion { get; init; }
     public string? Resize { get; init; }
     public string? Move { get; init; }
     public bool Maximize { get; init; }

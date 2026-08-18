@@ -4,8 +4,7 @@ internal static class HelpFactory
 {
     public static void PrintHelp()
     {
-        Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("uiactl"));
-        Console.WriteLine("""
+        IdleOps.Shared.Cli.HelpPrinter.PrintRaw("uiactl", """
             Usage: uiactl -w "<title>" [selector] <verb>
 
             Element-level desktop automation via UI Automation. Drives accessible

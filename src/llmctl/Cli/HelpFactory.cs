@@ -4,8 +4,7 @@ internal static class HelpFactory
 {
     public static void PrintHelp()
     {
-        Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("llmctl"));
-        Console.WriteLine("""
+        IdleOps.Shared.Cli.HelpPrinter.PrintRaw("llmctl", """
             Usage: llmctl --goal "<prompt>" [--image <screenshot.png>] [--system "<instructions>"]
 
             Thin client for an OpenAI-compatible chat endpoint (Ollama, vLLM, LM Studio).

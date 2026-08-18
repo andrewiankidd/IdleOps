@@ -26,8 +26,7 @@ internal static class Program
 
         if (showHelp || (string.IsNullOrWhiteSpace(window) && !showVersion) || (string.IsNullOrWhiteSpace(imagePath) && !showVersion))
         {
-            Console.WriteLine(IdleOps.Shared.Cli.BuildInfo.Banner("imgfnd"));
-            Console.WriteLine("""
+            IdleOps.Shared.Cli.HelpPrinter.PrintRaw("imgfnd", """
                 Usage: imgfnd --window "<title>" --image <reference.png> [--threshold 0.8]
 
                 Find a reference image within a window screenshot and return its center coordinates.
@@ -47,7 +46,7 @@ internal static class Program
 
         if (showVersion)
         {
-            Console.WriteLine($"imgfnd {typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0"}");
+            IdleOps.Shared.Cli.HelpPrinter.PrintVersion("imgfnd", IdleOps.Shared.Cli.BuildInfo.Version);
             return 0;
         }
 

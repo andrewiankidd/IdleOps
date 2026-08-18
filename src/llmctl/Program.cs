@@ -19,6 +19,12 @@ internal static class Program
             return 1;
         }
 
+        if (options.ShowVersion)
+        {
+            IdleOps.Shared.Cli.HelpPrinter.PrintVersion("llmctl", IdleOps.Shared.Cli.BuildInfo.Version);
+            return 0;
+        }
+
         if (options.ShowHelp || !options.HasAction)
         {
             HelpFactory.PrintHelp();

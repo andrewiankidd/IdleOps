@@ -21,6 +21,7 @@ internal record Options
     public string? ElementAt { get; init; }
 
     public bool ShowHelp { get; init; }
+    public bool ShowVersion { get; init; }
 
     public bool HasVerb =>
         SetValue is not null || GetValue || Invoke || Toggle || Expand || Collapse || Select || Dump

@@ -18,6 +18,7 @@ internal static class OptionsParser
             })
             .Flag("--gone", () => opts = opts with { Gone = true })
             .Flag("-h", "--help", () => opts = opts with { ShowHelp = true })
+            .Flag("--version", () => opts = opts with { ShowVersion = true })
             .Parse();
 
         return opts;

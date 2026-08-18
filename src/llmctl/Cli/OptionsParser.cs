@@ -22,6 +22,7 @@ internal static class OptionsParser
             })
             .Flag("--list", () => opts = opts with { List = true })
             .Flag("-h", "--help", () => opts = opts with { ShowHelp = true })
+            .Flag("--version", () => opts = opts with { ShowVersion = true })
             .Parse();
 
         return opts;
